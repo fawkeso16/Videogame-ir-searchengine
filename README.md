@@ -1,0 +1,1 @@
+IR system using tf-idf weighting(so far) - using natural language processing to process data, and use cosine similarity to retrieve relevance - future additions: feedback, better wighting technique? . increase efficiency etc. 
