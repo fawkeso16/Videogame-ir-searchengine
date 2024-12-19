@@ -78,36 +78,33 @@ def get_all_terms_in_document(document_id):
 
 
 
-def calculate_weighting(docs):
-    for document in range(docs):
+def calculate_weighting(doc_count):
+    for document in range(doc_count):
         #print(f"Processing document {document}")
         #print(get_all_terms_in_document(document))
         for term in inverted_index_dict:
-            # Get term frequency for the current document
             tf = inverted_index_dict[term]["doc_frequency"].get(document, 0)
             df = get_total_document_term_count(document)
 
-          #  print(f"Document {document}, Term: {term}, tf: {tf}, df: {df}")
             if df == 0: 
                 continue
 
-            # Normalize term frequency
             t_frequency = tf / df
             term_frequency = math.log(1 + t_frequency)
-        
+    
 
             # Get document count for the term
             idf = get_doc_count_term_frequency(term)
             #ßprint(f"Term: {term}, idf: {idf}")
-            if idf == 0 or idf == docs:  
+            if idf == 0 or idf == doc_count:  
                 continue
 
             # Ensure that IDF is calculated correctly and cannot be negative
-            if idf > docs:
-                idf = docs
+            if idf > doc_count:
+                idf = doc_count
 
             # Calculate inverse document frequency
-            inverse_document_frequency = math.log(docs / idf)
+            inverse_document_frequency = math.log(doc_count / idf)
             if inverse_document_frequency == 0: 
                 continue
 
@@ -122,6 +119,22 @@ def calculate_weighting(docs):
 
     return weights
 
+
+
+def generate_weighted_matrix(weights):
+
+    df = pd.DataFrame.from_dict(weights, orient="index")
+    #swapping axis of matrix
+    df = df.transpose()
+
+    # Fill NaN values with 0 (for terms that don't exist in certain documents)
+    df = df.fillna(0)
+
+    #here we compute normalization of vectors, so for each column we find the sum of each value squared, and then root the result. then we divide every vector value of every document by the magnitude
+    magnitudes = np.sqrt((df**2).sum(axis=1))
+    normalized_df_matrix = df.div(magnitudes, axis=0)
+
+    return normalized_df_matrix
 
 
 def get_unique_terms():

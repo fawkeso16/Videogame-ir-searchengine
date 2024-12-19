@@ -1,7 +1,5 @@
 from retrieval import read_html_from_csv, process_file_and_save, load_files
-from processing import tokenise_texts, getInvertedIndex, get_total_document_term_count, get_total_documents, get_doc_count_term_frequency, get_term_frequency, calculate_weighting, get_unique_terms
-
-import pandas as pd
+from processing import tokenise_texts, getInvertedIndex, get_total_document_term_count, get_total_documents, get_doc_count_term_frequency, get_term_frequency, calculate_weighting, get_unique_terms, generate_weighted_matrix
 
 # Get list of file paths from your CSV
 # file_paths = read_html_from_csv('videogame-labels.csv')
@@ -10,9 +8,10 @@ import pandas as pd
 # for path in file_paths:  # Loop through each file path
 #     process_file_and_save(path)  #
 
-directory = "/Users/oliverfawkes/Downloads/videogames"  
-allFiles = load_files(directory, 100)
+file_amount = 50
 
+directory = "/Users/oliverfawkes/Downloads/videogames"  
+allFiles = load_files(directory, file_amount)
 
 
 
@@ -21,15 +20,12 @@ for i, data in enumerate(allFiles):
     tokenise_texts(data, i)
 
 #inv_index = getInvertedIndex()
+weights = calculate_weighting(50)
 
-weights = calculate_weighting(100)
+matrix = generate_weighted_matrix(weights)
 
-df = pd.DataFrame.from_dict(weights, orient='index')
+print(matrix)
 
-# Fill NaN values with 0 (for terms that don't exist in certain documents)
-df = df.fillna(0)
-
-print(df)
 
 
 
