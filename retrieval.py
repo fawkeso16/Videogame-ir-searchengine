@@ -43,7 +43,6 @@ def process_file_and_save(filepath):
         game_data = soup.find('div', id='content')
 
         if game_data:
-            #retieve title
             game_title = soup.find('span', class_='contenttitle')
             extracted_text.append(game_title.get_text().strip())
             
@@ -53,7 +52,7 @@ def process_file_and_save(filepath):
             for info in data:
                 extracted_text.append(info.get_text().strip())
 
-            # Collect all #text nodes inside game_data
+            # collect all #text nodes inside game_data
             comments = soup.find_all(string=lambda text: isinstance(text, Comment))
             description_text = ""
 
@@ -77,11 +76,12 @@ def process_file_and_save(filepath):
                         if isinstance(current, str):
                             description_text += current.strip() + " "
                 
+                        #move to next value
                         prev = current
                         current = current.next_sibling
                         if current == prev:
                             break  
-                        loop_count += 1  # Increment the safety counter
+                        loop_count += 1  
 
                     if loop_count >= 100:
                         print("error loading too much info")
@@ -107,7 +107,7 @@ def process_file_and_save(filepath):
 
 #function to load all files from directory that are pickle files
 def load_files(directory, num_files):
-    pickle_data = []
+    pickle_data = {}
 
     # List all files in the directory
     files = [f for f in os.listdir(directory) if f.endswith('.pkl')]
@@ -120,7 +120,7 @@ def load_files(directory, num_files):
             # Open and load the pickle file
             with open(file_path, 'rb') as pickle_file:
                 data = pickle.load(pickle_file)
-                pickle_data.append(data)
+                pickle_data[filename] = data  # Store content with file name as key
         except FileNotFoundError:
             print(f"File not found: {file_path}")
         except Exception as e:

@@ -1,38 +1,33 @@
 from retrieval import read_html_from_csv, process_file_and_save, load_files
-from processing import tokenise_texts, getInvertedIndex, get_total_document_term_count, get_total_documents, get_doc_count_term_frequency, get_term_frequency, calculate_weighting, get_unique_terms, generate_weighted_matrix
+from processing import compute_cosine_similarity, tokenise_texts, getInvertedIndex, get_total_document_term_count, get_total_documents, get_doc_count_term_frequency, get_term_frequency, calculate_document_weights, calculate_query_weights, get_unique_terms, generate_normalized_weighted_matrix, normalize_weights
+from query import search_query 
 
-# Get list of file paths from your CSV
+
+import os
+import pickle
 # file_paths = read_html_from_csv('videogame-labels.csv')
-
-# # Process all HTML files.
 # for path in file_paths:  # Loop through each file path
 #     process_file_and_save(path)  #
 
 file_amount = 50
 
-directory = "/Users/oliverfawkes/Downloads/videogames"  
-allFiles = load_files(directory, file_amount)
+
+directory = "/Users/oliverfawkes/Downloads/videogames"
+allFiles = load_files(directory, file_amount)  # Returns a dictionary
+
+for file_name, data in allFiles.items():
+    tokenise_texts(data, file_name)
 
 
 
-for i, data in enumerate(allFiles):
-    #print(f"Data from pickle file {i+1}, {data}")  
-    tokenise_texts(data, i)
+weights = calculate_document_weights(50)
+normalize = normalize_weights(weights)
 
-#inv_index = getInvertedIndex()
-weights = calculate_weighting(50)
+matrix = generate_normalized_weighted_matrix(normalize)
 
-matrix = generate_weighted_matrix(weights)
+query = str(input("Enter query: "))
 
-print(matrix)
+weighted_query = search_query(query)
 
-
-
-
-
-#print(getInvertedIndex())
-# print(get_total_document_term_count(3))
-# print(get_total_documents())
-# print(get_doc_count_term_frequency("run"))
-# Print or process the extracted text
+print(compute_cosine_similarity(weighted_query, weights))
 
