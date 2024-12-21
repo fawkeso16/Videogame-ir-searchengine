@@ -17,15 +17,15 @@ inverted_index_dict = {}
 weights = {}
 unique_terms = set()  
 
-def addToInvertedIndex(text, doc):
+def addToInvertedIndex(text, docname):
     for token in text:
         if token not in inverted_index_dict:
             inverted_index_dict[token] = {"doc_frequency": {}, "total_tf": 0}
 
-        if doc not in inverted_index_dict[token]["doc_frequency"]:
-            inverted_index_dict[token]["doc_frequency"][doc] = 0
+        if docname not in inverted_index_dict[token]["doc_frequency"]:
+            inverted_index_dict[token]["doc_frequency"][docname] = 0
 
-        inverted_index_dict[token]["doc_frequency"][doc] += 1
+        inverted_index_dict[token]["doc_frequency"][docname] += 1
         inverted_index_dict[token]["total_tf"] += 1
 
 
@@ -61,18 +61,28 @@ def get_all_terms_in_document(document_id):
 
 
 #tokenising text methods
-def tokenise_texts(texts, i):
-    # efficiency chnage - pipe texts instead of calling each iteration
+def tokenise_texts(allfiles):
+
+    texts = list(allfiles.values())  
+    file_names = list(allfiles.keys()) 
+
+    texts = [' '.join(text) if isinstance(text, list) else text for text in texts]
+    #efficiency change - pipe files to prcoess all at once
     docs = nlp.pipe(texts)
-    for doc in docs:
-        filtered_tokens = [token.lemma_.lower() for token in doc if not token.is_punct and not token.is_space and not token.is_stop]
-        addToInvertedIndex(filtered_tokens, i)
+
+    for doc, file_name in zip(docs, file_names):
+        filtered_tokens = [
+            token.lemma_.lower() 
+            for token in doc 
+            if not token.is_punct and not token.is_space and not token.is_stop
+        ]
+        addToInvertedIndex(filtered_tokens, file_name)
 
 def tokenise_query(query):
     doc = nlp(query)
-    filtered_tokens = [token.lemma_.lower() for token in doc if not token.is_punct and not token.is_space and not token.is_stop
-    ]
-
+    filtered_tokens = [token.lemma_.lower() for token in doc 
+                       if not token.is_punct and not token.is_space 
+                       and not token.is_stop]
     return filtered_tokens
 
 

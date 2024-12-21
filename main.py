@@ -5,7 +5,7 @@ from query import search_query
 
 import os
 import pickle
-# file_paths = read_html_from_csv('videogame-labels.csv')
+# file_paths = read_html_from_csv('videogame-labels.csv', direct)
 # for path in file_paths:  # Loop through each file path
 #     process_file_and_save(path)  #
 
@@ -13,10 +13,9 @@ file_amount = 50
 
 
 directory = "/Users/oliverfawkes/Downloads/videogames"
-allFiles = load_files(directory, file_amount)  # Returns a dictionary
+allFiles = load_files(directory, file_amount)  
 
-for file_name, data in allFiles.items():
-    tokenise_texts(data, file_name)
+tokenise_texts(allFiles)
 
 
 
@@ -31,3 +30,13 @@ weighted_query = search_query(query)
 
 print(compute_cosine_similarity(weighted_query, weights))
 
+testquery1 = "ICO"
+testquery2 = "ICO"
+testquery3 = "ICO"
+testquery4 = "ICO"
+testquery5 = "ICO"
+testquery6 = "ICO"
+testquery7 = "ICO"
+testquery8 = "ICO"
+testquery9 = "ICO"
+testquery10 = "ICO"
