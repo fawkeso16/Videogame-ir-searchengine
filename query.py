@@ -1,4 +1,4 @@
-from processing import calculate_query_weights, get_total_documents, normalize_query_weights
+from processing import calculate_query_weights,get_total_documents, normalize_query_weights
 
 def search_query(query):
 
