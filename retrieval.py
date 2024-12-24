@@ -34,6 +34,7 @@ def process_file_and_save(filepath, directory):
     game_info = {
         "title": None,
         "metadata": {},
+        "metadata_no_struc": None,
         "description": None
     }
 
@@ -52,12 +53,22 @@ def process_file_and_save(filepath, directory):
             game_metadata = game_data.find_all('td', class_='gameBioInfoText')
             if len(game_metadata) >= 5:
                 game_info["metadata"] = {
-                    "developer": game_metadata[0].get_text().strip(),
-                    "publisher": game_metadata[1].get_text().strip(),
-                    "genre": game_metadata[2].get_text().strip(),
-                    "releaseDate": game_metadata[3].get_text().strip(),
-                    "rating": game_metadata[4].get_text().strip()
+                    "title": game_title.get_text().strip().lower(),
+                    "developer": game_metadata[0].get_text().strip().lower(),
+                    "publisher": game_metadata[1].get_text().strip().lower(),
+                    "genre": game_metadata[2].get_text().strip().lower(),
+                    "releaseDate": game_metadata[3].get_text().strip().lower(),
+                    "rating": game_metadata[4].get_text().strip().lower()
                 }
+
+                game_info["metadata_no_struc"] = [
+                    game_metadata[0].get_text().strip().lower(),
+                    game_metadata[1].get_text().strip().lower(),
+                    game_metadata[2].get_text().strip().lower(),
+                    game_metadata[3].get_text().strip().lower(),
+                    game_metadata[4].get_text().strip().lower()
+                ]
+
 
             comments = soup.find_all(string=lambda text: isinstance(text, Comment))
             description_text = ""
@@ -72,7 +83,7 @@ def process_file_and_save(filepath, directory):
                         if isinstance(current, Comment) and current.strip() == "/DESCRIPTION":
                             break
                         if isinstance(current, str):
-                            description_text += current.strip() + " "
+                            description_text += current.strip().lower() + " "
                         prev = current
                         current = current.next_sibling
                         if current == prev:
@@ -89,7 +100,7 @@ def process_file_and_save(filepath, directory):
     except Exception as e:
         print(f"Error processing file {filepath}: {e}")
 
-    # Save the structured data as a pickle file
+
     if game_info["title"]:  
         pickle_filename = os.path.join(directory, os.path.basename(filepath) + ".pkl")
         with open(pickle_filename, 'wb') as pickle_file:

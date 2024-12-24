@@ -5,12 +5,20 @@ import pandas as pd
 nlp = spacy.load("en_core_web_sm")
 inverted_index_dict = {}
 metadata_dict = {}  
-
 weights = {}
 unique_terms = set()  
 
+
+TITLE_BOOST = 6
+GENRE_BOOST = 5
+PUBLISHER_BOOST = 5
+DEVELOPER_BOOST = 5
+RATING_BOOST = 5
+RELEASE_DATE_BOOST = 5
+
+
+
 def addToInvertedIndex(text, docname, metadata):
-    # Store metadata once per document
     if docname not in metadata_dict:
         metadata_dict[docname] = metadata
 
@@ -18,12 +26,12 @@ def addToInvertedIndex(text, docname, metadata):
         if token not in inverted_index_dict:
             inverted_index_dict[token] = {"doc_frequency": {}, "total_tf": 0}
 
-        # If the term hasn't been encountered in this document, initialize it
         if docname not in inverted_index_dict[token]["doc_frequency"]:
             inverted_index_dict[token]["doc_frequency"][docname] = {"tf": 0}
 
         inverted_index_dict[token]["doc_frequency"][docname]["tf"] += 1
-        inverted_index_dict[token]["total_tf"] += 1  # Increment total term frequency across all documents
+        inverted_index_dict[token]["total_tf"] += 1  
+
 
 # Useful methods for main functionality
 def get_term_frequency(term):
@@ -53,7 +61,7 @@ def get_all_terms_in_document(document_id):
 
 # Useful methods end 
 
-def tokenise_texts(allFiles, metadata_dict_input):
+def tokenise_texts(allFiles, metadata_dict):
     texts = list(allFiles.values())  
     file_names = list(allFiles.keys())  
 
@@ -69,7 +77,8 @@ def tokenise_texts(allFiles, metadata_dict_input):
         ]
 
         # Add to the inverted index with metadata
-        addToInvertedIndex(filtered_tokens, file_name, metadata_dict_input[file_name])
+        addToInvertedIndex(filtered_tokens, file_name, metadata_dict[file_name])
+
 
 def tokenise_query(query):
     doc = nlp(query)
@@ -89,11 +98,27 @@ def calculate_document_weights(count):
         df = len(doc_frequency)
         if df == 0:
             continue  
-        idf = math.log(doc_count / (1 + df))  # Adding 1 to avoid division by zero
+        
+        idf = math.log(1 + (doc_count / (1 + df)))
     
         for doc, tf in doc_frequency.items():
             term_frequency = math.log(1 + tf["tf"]) / term_data["total_tf"]
             tf_idf = term_frequency * idf
+
+            if token in metadata_dict[doc]["title"]:  # Assuming title is part of metadata_dict
+                tf_idf *= TITLE_BOOST  # Increase the weight if it's in the title
+            elif token in metadata_dict[doc]["genre"]:
+                tf_idf *= GENRE_BOOST
+            elif token in metadata_dict[doc]["developer"]:
+                tf_idf *= DEVELOPER_BOOST
+            elif token in metadata_dict[doc]["publisher"]:
+                tf_idf *= PUBLISHER_BOOST
+            elif token in metadata_dict[doc]["rating"]:
+                tf_idf *= RATING_BOOST
+            elif token in metadata_dict[doc]["releaseDate"]:
+                tf_idf *= RELEASE_DATE_BOOST
+
+
             if doc not in weights:
                 weights[doc] = {}
             weights[doc][token] = tf_idf
@@ -119,7 +144,24 @@ def calculate_query_weights(count, query):
         idf = get_doc_count_term_frequency(term)  
         inverse_document_frequency = math.log(count / idf) if idf > 0 else 0
 
-        query_weights[term] = tf * inverse_document_frequency
+        weight = tf * inverse_document_frequency
+
+        if term in [metadata["title"] for metadata in metadata_dict.values()]:
+            weight *= TITLE_BOOST  # Increase the weight if it's in the title
+        elif term in [metadata["genre"] for metadata in metadata_dict.values()]:
+            weight *= GENRE_BOOST
+        elif term in [metadata["developer"] for metadata in metadata_dict.values()]:
+            weight *= DEVELOPER_BOOST
+        elif term in[metadata["publisher"] for metadata in metadata_dict.values()]:
+            weight *= PUBLISHER_BOOST
+        elif term in [metadata["rating"] for metadata in metadata_dict.values()]:
+            weight *= RATING_BOOST
+        elif term in[metadata["releaseDate"] for metadata in metadata_dict.values()]:
+            weight *= RELEASE_DATE_BOOST
+
+
+        query_weights[term] = weight
+
     return query_weights
 
 def normalize_query_weights(query_weights):
