@@ -1,8 +1,9 @@
 from retrieval import read_html_from_csv, process_file_and_save, load_files
-from processing import compute_cosine_similarity, tokenise_texts, calculate_document_weights, getInvertedIndex, getMetadata, calculate_query_weights, generate_normalized_weighted_matrix, normalize_weights
+from processing import calculate_precision_recall, lemmatize_metadata, compute_cosine_similarity, tokenize_texts, calculate_document_weights, getInvertedIndex, getMetadata, calculate_query_weights,precision_ten, generate_normalized_weighted_matrix, normalize_document_weights
 from query import search_query 
 
 
+import csv
 import os
 import pickle
 import matplotlib.pyplot as plt
@@ -37,100 +38,94 @@ for i, (filename, data) in enumerate(pickle_data.items()):
     description_words = game_info["description"] or ""
 
     all_words = f"{title_words} {metadata_words} {description_words}".split()
-
     allFiles[base_filename] = all_words
-
     metadata_dict[base_filename] = game_info["metadata"]
     
 
 
-tokenise_texts(allFiles, metadata_dict)
 
-# print(allFiles)
+# game_entities = {
+#     "TITLE": sorted(all_titles),
+#     "GENRE": sorted(all_genres),
+#     "DEVELOPER": sorted(all_developers),
+#     "PUBLISHER": sorted(all_publishers),
+#     "YEAR": [str(year) for year in range(1980, 2025)] 
+# }
 
-# print(getMetadata())
-#pickle file, 1-title, 2-developer, 3-publisher, 4-genre, 5-rating, 6-description
+
+with open('game_entities.pkl', 'rb') as f:
+    game_entities = pickle.load(f)
 
 
-weights = calculate_document_weights(399)
-normalize = normalize_weights(weights)
+print(game_entities)
+lemmatized_metadata = lemmatize_metadata(metadata_dict) 
 
+tokenize_texts(allFiles,lemmatized_metadata)
+weights = calculate_document_weights()
+normalize = normalize_document_weights(weights)
 matrix = generate_normalized_weighted_matrix(normalize)
 
 
-print(getMetadata())
-# print(matrix)
-# #query = str(input("Enter query: "))
-
-# terms_dict = getInvertedIndex()
-# search_terms = ["ico", "okami", "devil", "kings", "warriors"]
-
-# doc = nlp(" ".join(search_terms))
-
-# # Use SpaCy attributes to filter
-# filteredterms = [
-#     token.lemma_.lower()
-#     for token in doc
-#     if not token.is_punct and not token.is_space and not token.is_stop
-# ]
+testqueries = {
+    "testquery1": "ICO",
+    "testquery2": "Okami",
+    "testquery3": "Devil Kings",
+    "testquery4": "Dynasty Warriors",
+    "testquery5": "Sports Genre Games",
+    "testquery6": "Hunting Genre Games",
+    "testquery7": "Game Developed by Eurocom",
+    "testquery8": "Game Published by Activision",
+    "testquery9": "Game Published by Sony Computer Entertainment",
+    "testquery10": "teen games ps2"
+ }
 
 
-# row_labels = matrix.index.tolist()  # This gets the row labels (terms)
-
-# # Check if any filtered term occurs in the row labels
-# rows_with_terms = [row for row in row_labels if any(filtered_term in row.lower() for filtered_term in filteredterms)]
-
-# # Print the rows containing any of the filtered terms
-# print(f"Rows containing any of the filtered terms: {rows_with_terms}")
-
-# print(filteredterms)
-
-# print(columns)
-
-# search_string = ""
-
-# # Check rows
-# is_in_rows = matrix.isin([search_string]).any(axis=1).any()
-
-# # Check columns
-# is_in_columns = matrix.isin([search_string]).any(axis=0).any()
-
-# print(f"Found in rows: {is_in_rows}, Found in columns: {is_in_columns}")
+with open('relevant_docs.pkl', 'rb') as f:
+    relevant_docs = pickle.load(f)
 
 
 
-testquery1 = "ICO"
-testquery2 = "Okami"
-testquery3 = "Devil Kings"
-testquery4 = "Dynasty Warriors"
-testquery5 = "Sports Genre Games"
-testquery6 = "Hunting Genre Games"
-testquery7 = "Game Developed by Eurocom"
-testquery8 = "Game Published by Activision"
-testquery9 = "Game Published by Sony Computer Entertainment"
-testquery10 = " Teen PS2 Games"
+# Initialize the plot
+plt.figure(figsize=(10, 7))
 
-# print(getMetadata())
-weighted_query = search_query(testquery1)
-print(compute_cosine_similarity(weighted_query, weights))
-weighted_query = search_query(testquery2)
-print(compute_cosine_similarity(weighted_query, weights))
-weighted_query = search_query(testquery3)
-print(compute_cosine_similarity(weighted_query, weights))
-weighted_query = search_query(testquery4)
-print(compute_cosine_similarity(weighted_query, weights))
-weighted_query = search_query(testquery5)
-print(compute_cosine_similarity(weighted_query, weights))
-weighted_query = search_query(testquery6)
-print(compute_cosine_similarity(weighted_query, weights))
-weighted_query = search_query(testquery7)
-print(compute_cosine_similarity(weighted_query, weights))
-weighted_query = search_query(testquery8)
-print(compute_cosine_similarity(weighted_query, weights))
-weighted_query = search_query(testquery9)
-print(compute_cosine_similarity(weighted_query, weights))
-weighted_query = search_query(testquery10)
-print(compute_cosine_similarity(weighted_query, weights))
+
+# Example loop to process queries and generate precision-recall plot
+# for query_key, query_value in testqueries.items():
+#     print(f"Processing Query: {query_key} - {query_value}")  # Debugging output for the current query
+
+#     # Get the relevant documents for the current query
+#     relevant_docs_for_query = relevant_docs[query_key]  # Access the relevant docs list using the query key    
+
+#     # Assume you have the `search_query` and `compute_cosine_similarity` functions
+#     weighted_query = search_query(query_value, game_entities, all_titles)
+    
+#     # Compute cosine similarities and get top retrieved docs
+#     retrieved_docs = compute_cosine_similarity(weighted_query, weights)
+    
+#     # Print out some of the retrieved docs for debugging
+#     print(f"Relevant Docs for {query_key}: {relevant_docs_for_query}")  # Debugging output for relevant docs
+#     print(f"Retrieved Docs for {query_key}: {retrieved_docs[:10]}...")  # Only show the first 10 for brevity
+
+#     # Calculate precision and recall for the current query
+#     precision = precision_ten(retrieved_docs, relevant_docs_for_query)
+#     recall = calculate_precision_recall(retrieved_docs, relevant_docs_for_query)[1]  # Only need recall value
+    
+#     print(f"Precision: {precision:.2f}, Recall: {recall:.2f}")  # Debugging output for precision and recall
+    
+#     # Plot precision-recall point for the current query
+#     label_text = f"{query_key}: Precision={precision:.2f}, Recall={recall:.2f}"  # Create a label with precision and recall
+#     plt.scatter(recall, precision, marker="o", label=label_text)
+
+# # Customize the plot
+# plt.title("Precision-Recall Points for All Queries")
+# plt.xlabel("Recall")
+# plt.ylabel("Precision")
+# plt.grid(True)
+# plt.legend(loc="upper left", bbox_to_anchor=(1, 1), fontsize='small')
+
+# plt.tight_layout()  
+# plt.show()
+
 
 
 # data = {
@@ -160,23 +155,37 @@ print(compute_cosine_similarity(weighted_query, weights))
 #     "Testquery10": ("manhunt-2", 0.0021135675471584477),
 # }
 
-data3 = {
-    "Testquery1": ("ico", 0.8939709316260098),
-    "Testquery2": ("okami", 0.8299052743697891),
-    "Testquery3": ("devil-kings", 0.23060358612300125),
-    "Testquery4": ("dynasty-warriors-4", 0.3643998478574397),
-    "Testquery5": ("tony-hawks-underground", 0.14077938868936918),
-    "Testquery6": ("tom-clancys-rainbow-six-3", 0.027650539948905987),
-    "Testquery7": ("spyro-v-working-title", 0.3786790752598778),
-    "Testquery8": ("tony-hawks-underground", 0.06761183402473288),
-    "Testquery9": ("sega-ages-classics-collection", 0.04688995322160524),
-    "Testquery10": ("manhunt-2", 0.010114075057013743),
- }
-# # Extract queries and similarity scores
-queries = list(data3.keys())
-scores = [item[1] for item in data3.values()]
+# data3 = {
+#     "Testquery1": ("ico", 0.8939709316260098),
+#     "Testquery2": ("okami", 0.8299052743697891),
+#     "Testquery3": ("devil-kings", 0.23060358612300125),
+#     "Testquery4": ("dynasty-warriors-4", 0.3643998478574397),
+#     "Testquery5": ("tony-hawks-underground", 0.14077938868936918),
+#     "Testquery6": ("tom-clancys-rainbow-six-3", 0.027650539948905987),
+#     "Testquery7": ("spyro-v-working-title", 0.3786790752598778),
+#     "Testquery8": ("tony-hawks-underground", 0.06761183402473288),
+#     "Testquery9": ("sega-ages-classics-collection", 0.04688995322160524),
+#     "Testquery10": ("manhunt-2", 0.010114075057013743),
+#  }
 
-print(np.mean(scores))
+# data4 = {
+#     "Testquery1": ('ico', 0.8434373018758231),
+#     "Testquery2": ('okami', 0.6266734911984305),
+#     "Testquery3": ('devil-kings', 0.6036812944250204),
+#     "Testquery4": ('dynasty-warriors-4', 0.26672898640300274),
+#     "Testquery5": ('ea-sports-fight-night-2004', 0.09358479426705091),
+#     "Testquery6": ('cabelas-big-game-hunter', 0.035286635625949504),
+#     "Testquery7": ('spyro-v-working-title', 0.6980927728105496),
+#     "Testquery8": ('tony-hawks-underground', 0.1860707913232095),
+#     "Testquery9": ('wild-arms-3', 0.1142751012807096),
+#     "Testquery10": ("devil-kings", 0.0170727852991542),
+#  }
+
+# # # # Extract queries and similarity scores
+# queries = list(data4.keys())
+# scores = [item[1] for item in data4.values()]
+
+# print(np.mean(scores))
 
 # # Plotting
 # plt.figure(figsize=(10, 6))

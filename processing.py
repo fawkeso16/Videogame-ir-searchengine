@@ -1,3 +1,15 @@
+# Date : 12 december 2024 
+# Author : Oliver Fawkes
+# Description : contains methods to caluclate weights of documetns using tf-idf weighting via an inverted index, and compare them to a weighted query and return ranked reusults.
+# History : 
+#  12/12/2024 - v1 .00 - intilal methods added, inverted index creation, and method to populate
+#  16/12/2024 - v1 .10  - tokenizing and lemmatizing text mthods added, helper methods added for future calulations
+#  17/12/2024 - v1. 20 -  document and query weghting and normalization added
+#  18/12/2024 - v1. 30 -  cosine similarity added
+#  24/12/2024 - v1. 35 -  Bug fixes and structure change - added metadata structure, altered current methods, added improved boost to weights for metadata
+#  27/12/2024 - v1. 40 - many more 'logic' bug fixes, changed boosts 
+
+import re
 import spacy
 import math
 import pandas as pd
@@ -9,13 +21,13 @@ weights = {}
 unique_terms = set()  
 
 
-TITLE_BOOST = 6
-GENRE_BOOST = 5
-PUBLISHER_BOOST = 5
-DEVELOPER_BOOST = 5
-RATING_BOOST = 5
-RELEASE_DATE_BOOST = 5
-
+#weigth boosts
+TITLE_BOOST = 30
+GENRE_BOOST = 50
+PUBLISHER_BOOST = 50
+DEVELOPER_BOOST = 50
+RATING_BOOST = 50
+RELEASE_DATE_BOOST = 10
 
 
 def addToInvertedIndex(text, docname, metadata):
@@ -59,38 +71,45 @@ def get_all_terms_in_document(document_id):
             terms_in_document.append(term)
     return terms_in_document
 
-# Useful methods end 
 
-def tokenise_texts(allFiles, metadata_dict):
+#methods too tokenise documents and tokenise querys, using spacy. returns an array of filtered tokens
+def tokenize_texts(allFiles, metadata_dict):
     texts = list(allFiles.values())  
     file_names = list(allFiles.keys())  
-
-    texts = [' '.join(text) if isinstance(text, list) else text for text in texts]
-
+    texts.extend(file_names)
+    texts = [' '.join(text) if isinstance(text, list) else text for text in texts] 
+    
     docs = nlp.pipe(texts)
-
     for doc, file_name in zip(docs, file_names):
+
         filtered_tokens = [
             token.lemma_.lower() 
             for token in doc 
             if not token.is_punct and not token.is_space and not token.is_stop
         ]
-
-        # Add to the inverted index with metadata
+        
+        split_file_name = file_name.lower().split('-') 
+        filtered_tokens.extend(split_file_name) 
+        filtered_tokens.append(file_name)    
+    
         addToInvertedIndex(filtered_tokens, file_name, metadata_dict[file_name])
 
 
-def tokenise_query(query):
+def tokenize_query(query):
     doc = nlp(query)
     filtered_tokens = [token.lemma_.lower() for token in doc 
                        if not token.is_punct and not token.is_space 
                        and not token.is_stop]
+    
+    print("filtered query : ", filtered_tokens)
+    
     return filtered_tokens
 
-# Calculating tf-idf weight and normalizing methods
-def calculate_document_weights(count):
+
+# Calculating tf-idf weight and normalizing methods, used slighly altered tf formula when working with querys
+def calculate_document_weights():
     weights = {}  
-    doc_count = count  
+    doc_count = get_total_documents()
 
     for token, term_data in inverted_index_dict.items():
         doc_frequency = term_data["doc_frequency"]
@@ -98,15 +117,15 @@ def calculate_document_weights(count):
         df = len(doc_frequency)
         if df == 0:
             continue  
-        
         idf = math.log(1 + (doc_count / (1 + df)))
     
         for doc, tf in doc_frequency.items():
             term_frequency = math.log(1 + tf["tf"]) / term_data["total_tf"]
             tf_idf = term_frequency * idf
 
-            if token in metadata_dict[doc]["title"]:  # Assuming title is part of metadata_dict
-                tf_idf *= TITLE_BOOST  # Increase the weight if it's in the title
+            #boost metadata checks 
+            if token in metadata_dict[doc]["title"]:  
+                tf_idf *= TITLE_BOOST  
             elif token in metadata_dict[doc]["genre"]:
                 tf_idf *= GENRE_BOOST
             elif token in metadata_dict[doc]["developer"]:
@@ -118,14 +137,13 @@ def calculate_document_weights(count):
             elif token in metadata_dict[doc]["releaseDate"]:
                 tf_idf *= RELEASE_DATE_BOOST
 
-
             if doc not in weights:
                 weights[doc] = {}
             weights[doc][token] = tf_idf
     return weights
 
 
-def normalize_weights(weights):
+def normalize_document_weights(weights):
     normalized_weights = {}
     
     for doc_id in weights:
@@ -136,33 +154,47 @@ def normalize_weights(weights):
         }
     return normalized_weights
 
-def calculate_query_weights(count, query):
-    query_tokens = tokenise_query(query)  
+
+
+def calculate_query_weights(query, entity_matches, matching_keywords):
+    print(f"Calculating weights for: {query}")
+
+    count = get_total_documents()
     query_weights = {}
-    for term in query_tokens:
-        tf = math.log(1 + query_tokens.count(term)) 
+    for term in query:
+        tf = math.log(1 + query.count(term)) 
         idf = get_doc_count_term_frequency(term)  
         inverse_document_frequency = math.log(count / idf) if idf > 0 else 0
 
         weight = tf * inverse_document_frequency
+        print(f"\nTerm: {term}")
+        print(f"Initial weight: {weight}")
 
-        if term in [metadata["title"] for metadata in metadata_dict.values()]:
-            weight *= TITLE_BOOST  # Increase the weight if it's in the title
-        elif term in [metadata["genre"] for metadata in metadata_dict.values()]:
+        #boost metadata checks 
+        if any(term in metadata["title"] for metadata in metadata_dict.values()):
+            weight *= TITLE_BOOST
+            print(f"Title boost applied: {weight}")
+        elif any(term in metadata["genre"] for metadata in metadata_dict.values()):
             weight *= GENRE_BOOST
-        elif term in [metadata["developer"] for metadata in metadata_dict.values()]:
+            print(f"Genre boost applied: {weight}")
+        elif any(term in metadata["developer"] for metadata in metadata_dict.values()):
             weight *= DEVELOPER_BOOST
-        elif term in[metadata["publisher"] for metadata in metadata_dict.values()]:
+            print(f"Developer boost applied: {weight}")
+        elif any(term in metadata["publisher"] for metadata in metadata_dict.values()):
             weight *= PUBLISHER_BOOST
-        elif term in [metadata["rating"] for metadata in metadata_dict.values()]:
+            print(f"Publisher boost applied: {weight}")
+        elif any(term in metadata["rating"] for metadata in metadata_dict.values()):
             weight *= RATING_BOOST
-        elif term in[metadata["releaseDate"] for metadata in metadata_dict.values()]:
+            print(f"Rating boost applied: {weight}")
+        elif any(term in metadata["releaseDate"] for metadata in metadata_dict.values()):
             weight *= RELEASE_DATE_BOOST
-
+            print(f"Release date boost applied: {weight}")
+        else:
+            print("No boost applied")
 
         query_weights[term] = weight
-
     return query_weights
+
 
 def normalize_query_weights(query_weights):
     magnitude = math.sqrt(sum(weight ** 2 for weight in query_weights.values()))
@@ -180,29 +212,60 @@ def generate_normalized_weighted_matrix(weights):
     df = df.fillna(0)
     return df
 
+
+#methods to calculate dot product of 2 (preferably normlazied) vectors.
 def compute_cosine_similarity(query_weights, doc_weights):
     cosine_similarities = {}
     query_magnitude = math.sqrt(sum(weight ** 2 for weight in query_weights.values()))
     if query_magnitude == 0:
-        return None, 0.0
+        return [], 0.0  # Return an empty list and 0 relevance if the query has no terms
 
+    # Compute cosine similarities
     for doc_id, term_weights in doc_weights.items():
         doc_magnitude = math.sqrt(sum(weight ** 2 for weight in term_weights.values()))
         if doc_magnitude == 0:
-            cosine_similarities[doc_id] = 0.0 
+            cosine_similarities[doc_id] = 0.0
             continue
         
         dot_product = sum(query_weights.get(term, 0) * term_weights.get(term, 0) for term in query_weights)
+        cosine_similarities[doc_id] = dot_product / (query_magnitude * doc_magnitude)
 
-        if query_magnitude != 0 and doc_magnitude != 0:
-            cosine_similarities[doc_id] = dot_product / (query_magnitude * doc_magnitude)
-        else:
-            cosine_similarities[doc_id] = 0.0 
+    # Filter docs with a score > 0.05
+    filtered_docs = [(doc_id, score) for doc_id, score in cosine_similarities.items() if score > 0.01]
 
-    best_doc_id = max(cosine_similarities, key=cosine_similarities.get, default=None)
-    best_similarity = cosine_similarities.get(best_doc_id, 0.0)
+    # Sort filtered docs by cosine similarity
+    sorted_filtered_docs = sorted(filtered_docs, key=lambda item: item[1], reverse=True)
+
+    # Limit to top 10 results
+    top_docs = sorted_filtered_docs[:10]
+
+    return top_docs
+
+
+def precision_ten(doc_array, relevant_docs_for_query):
+    if not doc_array:
+        return 0
+    # Count how many relevant documents are in the top N retrieved documents
+    relevant_count = sum(1 for doc_id, _ in doc_array if doc_id in relevant_docs_for_query)
+    return relevant_count / len(doc_array)
+
+
+def calculate_precision_recall(retrieved_docs, relevant_docs_for_query, top_n=10):
+    # Limit to the top N retrieved documents
+    retrieved_docs_top_n = retrieved_docs[:top_n]
     
-    return best_doc_id, best_similarity
+    # Count how many relevant documents are in the top N retrieved documents
+    relevant_count = sum(1 for doc_id, _ in retrieved_docs_top_n if doc_id in relevant_docs_for_query)
+
+    # Calculate precision: relevant retrieved docs / total retrieved docs (top_n)
+    precision = relevant_count / top_n if len(retrieved_docs_top_n) > 0 else 0
+    
+    # Calculate recall: relevant retrieved docs / total relevant docs (capped at 10)
+    recall = relevant_count / min(len(relevant_docs_for_query), 10) if len(relevant_docs_for_query) > 0 else 0
+
+    return precision, recall
+
+
 
 # Getters for testing 
 def get_unique_terms():
@@ -213,3 +276,18 @@ def getInvertedIndex():
 
 def getMetadata():
     return metadata_dict
+
+
+#mostly used for debugging 
+def lemmatize_metadata(metadata_dict):
+    processed_dict = {}
+    
+    for filename, metadata in metadata_dict.items():
+        processed_dict[filename] = {}
+        for field, value in metadata.items():
+            value = ' '.join(str(value).split())
+            doc = nlp(value)
+            processed_value = ' '.join([token.lemma_.lower() for token in doc if token is not token.is_punct])
+            processed_dict[filename][field] = processed_value
+    
+    return processed_dict
