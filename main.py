@@ -17,13 +17,26 @@ allFiles = {}
 metadata_dict = {}
 
 
+#Setting up NER
 with open('processed_game_entities.pkl', 'rb') as f:
     processed_game_entities = pickle.load(f)
+
+ruler = nlp.add_pipe("entity_ruler", before="ner")
+def create_patterns(entities_dict):
+    patterns = []
+    for label, values in entities_dict.items():
+        for value in values:
+            patterns.append({"label": label, "pattern": value})
+    return patterns
+
+patterns = create_patterns(processed_game_entities)
+ruler.add_patterns(patterns)
 
 
 with open('relevant_docs.pkl', 'rb') as f:
     relevant_docs = pickle.load(f)
-
+with open('metadata_dict.pkl', 'rb') as f:
+    meta = pickle.load(f)
 
 
 directory = "/Users/oliverfawkes/Downloads/videogames"
@@ -32,67 +45,52 @@ directory = "/Users/oliverfawkes/Downloads/videogames"
 #     process_file_and_save(path, directory)  #
  
 
-pickle_data = load_files(directory, 399)
-
-file_amount = 399
-for i, (filename, data) in enumerate(pickle_data.items()):
-    if i >= file_amount:
-        print(f"too many {i}")
-        break  
-
-    game_info = data  
-    base_filename = filename.replace('.html.pkl', '')
-
-    title_words = game_info["title"] or ""
-    metadata_words = " ".join(game_info["metadata_no_struc"] or [])
-    description_words = game_info["description"] or ""
-
-    all_words = f"{title_words} {metadata_words}".split()
-    allFiles[base_filename] = all_words
-    metadata_dict[base_filename] = game_info["metadata"]
+#read all files and get data
+# pickle_data = load_files(directory, 399)
+# file_amount = 399
+# for i, (filename, data) in enumerate(pickle_data.items()):
+#     if i >= file_amount:
+#         print(f"too many {i}")
+#         break  
+#     game_info = data  
+#     base_filename = filename.replace('.html.pkl', '')
+#     title_words = game_info["title"] or ""
+#     metadata_words = " ".join(game_info["metadata_no_struc"] or [])
+#     description_words = game_info["description"] or ""
+#     all_words = f"{title_words} {metadata_words}".split()
+#     allFiles[base_filename] = all_words
+#     metadata_dict[base_filename] = game_info["metadata"]
     
 
+# lemmatized_metadata = lemmatize_metadata(metadata_dict) 
 
-lemmatized_metadata = lemmatize_metadata(metadata_dict) 
+# def clean_metadata(metadata_dict):
+#     for file_name, game_metadata in metadata_dict.items():
+#         for field, field_value in game_metadata.items():
+#             if isinstance(field_value, str):
+#                 cleaned_value = re.sub(r"\b's\b", '', field_value)
+#                 cleaned_value = re.sub(r'[^\w\s]', '', cleaned_value)
+#                 cleaned_value = re.sub(r'\s*ps2\s*', '', cleaned_value, flags=re.IGNORECASE)
+#                 cleaned_value = re.sub(r'\s+', ' ', cleaned_value).strip()
+#                 game_metadata[field] = cleaned_value
+
+#     return metadata_dict
+
+# def clean_developer_and_publisher(data_dict):
+#     regex = r'\s*\(.*?\)\s*'  
+#     for key in ['DEVELOPER', 'PUBLISHER']:
+#         if key in data_dict:
+#             cleaned_list = []
+#             for item in data_dict[key]:
+#                 cleaned_item = re.sub(regex, '', item).strip()
+#                 cleaned_list.append(cleaned_item)
+#             data_dict[key] = cleaned_list
+#     return data_dict
 
 
-def clean_metadata(metadata_dict):
-    for file_name, game_metadata in metadata_dict.items():
-        for field, field_value in game_metadata.items():
-            if isinstance(field_value, str):
-                # Remove possessive "'s"
-                cleaned_value = re.sub(r"\b's\b", '', field_value)
+# with open('processed_game_entities.pkl', 'wb') as f:
+#     pickle.dump(processed_game_entities, f)
 
-                # Remove non-alphanumeric characters except spaces
-                cleaned_value = re.sub(r'[^\w\s]', '', cleaned_value)
-
-                # Remove occurrences of "ps2" (case-insensitive)
-                cleaned_value = re.sub(r'\s*ps2\s*', '', cleaned_value, flags=re.IGNORECASE)
-
-                # Normalize whitespace and trim
-                cleaned_value = re.sub(r'\s+', ' ', cleaned_value).strip()
-
-                game_metadata[field] = cleaned_value
-
-    return metadata_dict
-
-
-
-def clean_developer_and_publisher(data_dict):
-    regex = r'\s*\(.*?\)\s*'  
-
-    for key in ['DEVELOPER', 'PUBLISHER']:
-        if key in data_dict:
-            cleaned_list = []
-            for item in data_dict[key]:
-                cleaned_item = re.sub(regex, '', item).strip()
-                cleaned_list.append(cleaned_item)
-            data_dict[key] = cleaned_list
-
-    return data_dict
-
-processed_game_entities = clean_developer_and_publisher(processed_game_entities)
-meta = clean_metadata(lemmatized_metadata)
 tokenize_texts(meta)
 weights = calculate_document_weights()
 normalize = normalize_document_weights(weights)
@@ -111,7 +109,7 @@ testqueries = {
  }
 
 # # # Initialize the plot
-# plt.figure(figsize=(10, 7))
+plt.figure(figsize=(10, 7))
 
 for query_key, query_value in testqueries.items():
     print(f"Processing Query: {query_key} - {query_value}") 

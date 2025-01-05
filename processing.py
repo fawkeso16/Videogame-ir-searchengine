@@ -8,24 +8,35 @@
 #  18/12/2024 - v1. 30 -  cosine similarity added
 #  24/12/2024 - v1. 35 -  Bug fixes and structure change - added metadata structure, altered current methods, added improved boost to weights for metadata
 #  27/12/2024 - v1. 40 - many more 'logic' bug fixes, changed boosts 
+#  29/12/2024 - v1. 50 - Implemetnted NER structure, big changes to all methods, tokenising text - added entity matching fully altered layout, removed redundant processing of text as chnaged to use mtadata soley
+#  - alterted weighting for both query and document to account for exact matches of enittys
 
 import re
 import spacy
 import math
 import pandas as pd
 import pickle
+from nltk import PorterStemmer
 
-nlp = spacy.load("en_core_web_sm", disable=["ner"])  # Disable the default NER component
+stemmer = PorterStemmer()
+keywords = ["title", "genre", "developer", "publisher", "release date", "rating"]
+stemmed_keywords = [stemmer.stem(word) for word in keywords]
+unwanted_words = ["game", "games", "ps2"]
+nlp = spacy.load("en_core_web_sm", disable=["ner"])  
+
+
+
 inverted_index_dict = {}
 metadata_dict = {}  
 weights = {}
 unique_terms = set()  
 
-with open('processed_game_entites.pkl', 'rb') as f:
+
+#Setting up NER
+with open('processed_game_entities.pkl', 'rb') as f:
     processed_game_entities = pickle.load(f)
-
+    
 ruler = nlp.add_pipe("entity_ruler", before="ner")
-
 def create_patterns(entities_dict):
     patterns = []
     for label, values in entities_dict.items():
@@ -35,7 +46,6 @@ def create_patterns(entities_dict):
 
 patterns = create_patterns(processed_game_entities)
 ruler.add_patterns(patterns)
-
 
 
 #weigth boosts
@@ -93,49 +103,49 @@ def clean_text(text):
 
 def tokenize_texts(metadata_dict):
     for file_name, game_metadata in metadata_dict.items():
-        filtered_tokens = []
-        field_tokens = []
+        filtered_tokens, tokens = [], []
 
-        for field, field_value in game_metadata.items():
-            if isinstance(field_value, str) and field_value.strip():
-                field_value = field_value.strip().lower()
-                field_tokens.extend(field_value.split())
+        for field, value in game_metadata.items():
+            if isinstance(value, str) and value.strip():
+                tokens.extend(value.strip().lower().split())
 
-        texts = ' '.join(field_tokens)
-        doc = nlp(texts)
+        doc = nlp(' '.join(tokens))
         entity_matches = {ent.text.lower(): ent.label_ for ent in doc.ents}
 
-        tokens = field_tokens
-        i = 0
-        while i < len(tokens):
-            token = tokens[i]
-            matched_entity = None
-            for j in range(i, len(tokens)):
-                entity_text = ' '.join(tokens[i:j + 1]).lower()
-                if entity_text in entity_matches:
-                    matched_entity = entity_text
-                    i = j
-                    break
+        for entity_key in entity_matches.keys():
+            if entity_key not in tokens:
+                tokens.append(entity_key)
+            entity_terms = entity_key.split()
+            for term in entity_terms:
+                if term not in tokens:
+                    tokens.append(term)
 
-            if matched_entity:
-                filtered_tokens.append(matched_entity)
-                filtered_tokens.extend(matched_entity.split())  
+        for token in tokens:
+            if token in entity_matches:
+                filtered_tokens.append(token)
+                entity_terms = token.split()
+                if len(entity_terms) > 1:
+                    filtered_tokens.extend(entity_terms)
             else:
                 filtered_tokens.append(token)
-
-            i += 1
 
         metadata_dict[file_name]['tokens'] = filtered_tokens
         addToInvertedIndex(filtered_tokens, file_name, metadata_dict[file_name])
 
 
+
 def tokenize_query(query):
     doc = nlp(query)
-    filtered_tokens = [token.lemma_.lower() for token in doc 
-                       if not token.is_punct and not token.is_space 
-                       and not token.is_stop]
+    filtered_tokens = [
+        stemmer.stem(token.lemma_.lower()) if token.lemma_.lower().endswith('s') else token.lemma_.lower()
+        for token in doc
+        if not token.is_punct and not token.is_space and not token.is_stop
+        and token.lemma_.lower() not in unwanted_words
+        and token.lemma_.lower() not in keywords
+        and stemmer.stem(token.lemma_.lower()) not in stemmed_keywords
+    ]
     
-    print("filtered query : ", filtered_tokens)
+    # print("filtered query : ", filtered_tokens)
     return filtered_tokens
 
 
@@ -190,7 +200,7 @@ def calculate_document_weights():
         for token, weight in terms.items():
             sub_terms = token.split()  
             for term in sub_terms:
-                term_weight = weight * 20 
+                term_weight = weight * 10
                 if term not in additional_weights:
                     additional_weights[term] = term_weight
                 else:
@@ -219,7 +229,7 @@ def normalize_document_weights(weights):
 
 
 
-def calculate_query_weights(query, game_entities):
+def calculate_query_weights(query, synonyms):
     print(f"Calculating weights for: {query}")
 
     count = get_total_documents()
@@ -234,7 +244,11 @@ def calculate_query_weights(query, game_entities):
         print(f"\nTerm: {term}")
         print(f"Initial weight: {weight}")
 
-        for entity_type, values in game_entities.items():
+        if term in synonyms:
+            weight *= 0.2
+            print(f"Synonym penalty applied to {term}: {weight}")
+
+        for entity_type, values in processed_game_entities.items():
             if any(term.lower() == value.lower() for value in values):
                 weight *= 2  
                 print(f"Exact entity match boost applied to {term}: {weight}")
@@ -264,6 +278,7 @@ def calculate_query_weights(query, game_entities):
         query_weights[term] = weight
 
     return query_weights
+
 
 
 
@@ -301,7 +316,7 @@ def compute_cosine_similarity(query_weights, doc_weights):
         dot_product = sum(query_weights.get(term, 0) * term_weights.get(term, 0) for term in query_weights)
         cosine_similarities[doc_id] = dot_product / (query_magnitude * doc_magnitude)
 
-    filtered_docs = [(doc_id, score) for doc_id, score in cosine_similarities.items() if score > 0.01]
+    filtered_docs = [(doc_id, score) for doc_id, score in cosine_similarities.items() if score > 0.1]
 
     sorted_filtered_docs = sorted(filtered_docs, key=lambda item: item[1], reverse=True)
 

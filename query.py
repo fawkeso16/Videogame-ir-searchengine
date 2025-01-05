@@ -1,17 +1,13 @@
 from processing import calculate_query_weights, get_total_documents, normalize_query_weights, tokenize_query
-from nltk import PorterStemmer
+import nltk
 import spacy
 import pickle
 from spacy.pipeline import EntityRuler
 
+
 nlp = spacy.load("en_core_web_sm")
 
-keywords = ["title", "genre", "developer", "publisher", "release date", "rating"]
-stemmer = PorterStemmer()
-stemmed_keywords = [stemmer.stem(word) for word in keywords]
-unwanted_words = ["game", "games", "ps2"]
-
-with open('processed_game_entites.pkl', 'rb') as f:
+with open('processed_game_entities.pkl', 'rb') as f:
     processed_game_entities = pickle.load(f)
 
 ruler = nlp.add_pipe("entity_ruler", before="ner")
@@ -26,16 +22,21 @@ def create_patterns(entities_dict):
 patterns = create_patterns(processed_game_entities)
 ruler.add_patterns(patterns)
 
+
+import requests
+
+def get_synonyms(word):
+    url = f"https://api.datamuse.com/words?rel_syn={word}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        return [item['word'] for item in response.json()]
+    return []
+
 def process_query(query):
+    allsynonyms = []
     tokenised_query = tokenize_query(query)
     hyphenated_words = [word.lower() for word in query.split() if '-' in word]
-    filtered_query = [
-        stemmer.stem(term) if term.endswith('s') else term
-        for term in tokenised_query
-        if term.lower() not in unwanted_words and
-           term.lower() not in keywords and
-           stemmer.stem(term.lower()) not in stemmed_keywords
-    ] + hyphenated_words
+    filtered_query = tokenised_query + hyphenated_words
 
     doc = nlp(" ".join(filtered_query))
     entity_matches = {ent.text.lower(): ent.text for ent in doc.ents if ent.label_ in processed_game_entities}
@@ -49,15 +50,26 @@ def process_query(query):
             if term not in filtered_query:
                 filtered_query.append(term)
 
-    return filtered_query
+    # Apply thesaurus-based query expansion
+    expanded_query = filtered_query.copy()
+    for token in filtered_query:
+        synonyms = get_synonyms(token)
+        for synonym in synonyms:
+            if synonym not in expanded_query:
+                expanded_query.append(synonym)
+                allsynonyms.append(synonym)
+                # print('SYNONYM ADDED: ', synonym)
+
+    return expanded_query, allsynonyms
+
 
 def search_query(query):
     print(f"Original Query: {query}")
     
-    filtered_query = process_query(query)
+    filtered_query, synonyms = process_query(query)
     print(f"Filtered Query: {filtered_query}")
 
-    query_weights = calculate_query_weights(filtered_query, processed_game_entities)
+    query_weights = calculate_query_weights(filtered_query, synonyms)
     final_weights = normalize_query_weights(query_weights)
 
     return final_weights

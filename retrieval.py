@@ -62,6 +62,7 @@ def process_file_and_save(filepath, directory):
                 }
 
                 game_info["metadata_no_struc"] = [
+                    game_title.get_text().strip().lower(),
                     game_metadata[0].get_text().strip().lower(),
                     game_metadata[1].get_text().strip().lower(),
                     game_metadata[2].get_text().strip().lower(),
