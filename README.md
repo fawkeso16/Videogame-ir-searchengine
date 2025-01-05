@@ -1,1 +1,1 @@
-IR system using tf-idf weighting(so far) - using natural language processing to process data, and use cosine similarity to retrieve relevance - future additions: feedback, better wighting technique? . increase efficiency etc. 
+IR system using tf-idf weighting. Basic search engine for a videogame depository. Techiniques used: natural language processing, tf-idf weighting, consine similarity, theasaurus based query expansion, custom named entity recognition, 
