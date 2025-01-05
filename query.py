@@ -1,60 +1,63 @@
 from processing import calculate_query_weights, get_total_documents, normalize_query_weights, tokenize_query
 from nltk import PorterStemmer
 import spacy
+import pickle
+from spacy.pipeline import EntityRuler
 
-# Load the spaCy model for lemmatization
 nlp = spacy.load("en_core_web_sm")
 
-# Define unwanted words and keywords
 keywords = ["title", "genre", "developer", "publisher", "release date", "rating"]
 stemmer = PorterStemmer()
 stemmed_keywords = [stemmer.stem(word) for word in keywords]
 unwanted_words = ["game", "games", "ps2"]
 
+with open('processed_game_entites.pkl', 'rb') as f:
+    processed_game_entities = pickle.load(f)
+
+ruler = nlp.add_pipe("entity_ruler", before="ner")
+
+def create_patterns(entities_dict):
+    patterns = []
+    for label, values in entities_dict.items():
+        for value in values:
+            patterns.append({"label": label, "pattern": value})
+    return patterns
+
+patterns = create_patterns(processed_game_entities)
+ruler.add_patterns(patterns)
+
 def process_query(query):
-    # Split the query by spaces and check for hyphenated words
-    hyphenated_words = [word for word in query.split() if '-' in word]
-    
-    # Tokenize the query and filter out unwanted words, lemmatize, etc.
     tokenised_query = tokenize_query(query)
+    hyphenated_words = [word.lower() for word in query.split() if '-' in word]
+    filtered_query = [
+        stemmer.stem(term) if term.endswith('s') else term
+        for term in tokenised_query
+        if term.lower() not in unwanted_words and
+           term.lower() not in keywords and
+           stemmer.stem(term.lower()) not in stemmed_keywords
+    ] + hyphenated_words
 
-    # Re-add hyphenated words after tokenization
-    filtered_query = []
-    for term in tokenised_query:
-        if term.lower() in unwanted_words:
-            continue
-        if term.lower() in keywords or stemmer.stem(term.lower()) in stemmed_keywords:
-            continue
-        filtered_query.append(term)
+    doc = nlp(" ".join(filtered_query))
+    entity_matches = {ent.text.lower(): ent.text for ent in doc.ents if ent.label_ in processed_game_entities}
 
-    for hyphenated_word in hyphenated_words:
-        filtered_query.append(hyphenated_word.lower())
+    for entity_key in entity_matches.keys():
+        if entity_key not in filtered_query:
+            filtered_query.append(entity_key)
+
+        entity_terms = entity_key.split()
+        for term in entity_terms:
+            if term not in filtered_query:
+                filtered_query.append(term)
 
     return filtered_query
 
-def search_query(query, game_entities, all_titles):
-    print(f"Original Query: {query}")    
+def search_query(query):
+    print(f"Original Query: {query}")
+    
     filtered_query = process_query(query)
     print(f"Filtered Query: {filtered_query}")
-    entity_matches = []
-    matching_keywords = []
 
-    # Iterate through the filtered query to find entity matches
-    for term in filtered_query:
-        for entity_type, values in game_entities.items():
-            if any(term.lower() == value.lower() for value in values):
-                entity_matches.append((term, entity_type))
-                break
-
-    print(f"Entity Matches: {entity_matches}")
-
-    for title in all_titles:
-        if title.lower() in ' '.join(filtered_query).lower():
-            entity_matches.append((title, "TITLE"))
-    
-    print(f"Updated Entity Matches: {entity_matches}")
-
-    query_weights = calculate_query_weights(filtered_query, entity_matches, [])
+    query_weights = calculate_query_weights(filtered_query, processed_game_entities)
     final_weights = normalize_query_weights(query_weights)
 
     return final_weights

@@ -13,20 +13,37 @@ import re
 import spacy
 import math
 import pandas as pd
+import pickle
 
-nlp = spacy.load("en_core_web_sm")
+nlp = spacy.load("en_core_web_sm", disable=["ner"])  # Disable the default NER component
 inverted_index_dict = {}
 metadata_dict = {}  
 weights = {}
 unique_terms = set()  
 
+with open('processed_game_entites.pkl', 'rb') as f:
+    processed_game_entities = pickle.load(f)
+
+ruler = nlp.add_pipe("entity_ruler", before="ner")
+
+def create_patterns(entities_dict):
+    patterns = []
+    for label, values in entities_dict.items():
+        for value in values:
+            patterns.append({"label": label, "pattern": value})
+    return patterns
+
+patterns = create_patterns(processed_game_entities)
+ruler.add_patterns(patterns)
+
+
 
 #weigth boosts
 TITLE_BOOST = 30
-GENRE_BOOST = 50
-PUBLISHER_BOOST = 50
-DEVELOPER_BOOST = 50
-RATING_BOOST = 50
+GENRE_BOOST = 30
+PUBLISHER_BOOST = 30
+DEVELOPER_BOOST = 30
+RATING_BOOST = 30
 RELEASE_DATE_BOOST = 10
 
 
@@ -71,27 +88,44 @@ def get_all_terms_in_document(document_id):
             terms_in_document.append(term)
     return terms_in_document
 
+def clean_text(text):
+    return ''.join([char.lower() for char in text if char.isalnum() or char.isspace()])
 
-#methods too tokenise documents and tokenise querys, using spacy. returns an array of filtered tokens
-def tokenize_texts(allFiles, metadata_dict):
-    texts = list(allFiles.values())  
-    file_names = list(allFiles.keys())  
-    texts.extend(file_names)
-    texts = [' '.join(text) if isinstance(text, list) else text for text in texts] 
-    
-    docs = nlp.pipe(texts)
-    for doc, file_name in zip(docs, file_names):
+def tokenize_texts(metadata_dict):
+    for file_name, game_metadata in metadata_dict.items():
+        filtered_tokens = []
+        field_tokens = []
 
-        filtered_tokens = [
-            token.lemma_.lower() 
-            for token in doc 
-            if not token.is_punct and not token.is_space and not token.is_stop
-        ]
-        
-        split_file_name = file_name.lower().split('-') 
-        filtered_tokens.extend(split_file_name) 
-        filtered_tokens.append(file_name)    
-    
+        for field, field_value in game_metadata.items():
+            if isinstance(field_value, str) and field_value.strip():
+                field_value = field_value.strip().lower()
+                field_tokens.extend(field_value.split())
+
+        texts = ' '.join(field_tokens)
+        doc = nlp(texts)
+        entity_matches = {ent.text.lower(): ent.label_ for ent in doc.ents}
+
+        tokens = field_tokens
+        i = 0
+        while i < len(tokens):
+            token = tokens[i]
+            matched_entity = None
+            for j in range(i, len(tokens)):
+                entity_text = ' '.join(tokens[i:j + 1]).lower()
+                if entity_text in entity_matches:
+                    matched_entity = entity_text
+                    i = j
+                    break
+
+            if matched_entity:
+                filtered_tokens.append(matched_entity)
+                filtered_tokens.extend(matched_entity.split())  
+            else:
+                filtered_tokens.append(token)
+
+            i += 1
+
+        metadata_dict[file_name]['tokens'] = filtered_tokens
         addToInvertedIndex(filtered_tokens, file_name, metadata_dict[file_name])
 
 
@@ -102,18 +136,18 @@ def tokenize_query(query):
                        and not token.is_stop]
     
     print("filtered query : ", filtered_tokens)
-    
     return filtered_tokens
 
 
 # Calculating tf-idf weight and normalizing methods, used slighly altered tf formula when working with querys
 def calculate_document_weights():
+    entity_match = ''
     weights = {}  
     doc_count = get_total_documents()
 
     for token, term_data in inverted_index_dict.items():
         doc_frequency = term_data["doc_frequency"]
-        
+    
         df = len(doc_frequency)
         if df == 0:
             continue  
@@ -123,24 +157,53 @@ def calculate_document_weights():
             term_frequency = math.log(1 + tf["tf"]) / term_data["total_tf"]
             tf_idf = term_frequency * idf
 
-            #boost metadata checks 
-            if token in metadata_dict[doc]["title"]:  
-                tf_idf *= TITLE_BOOST  
-            elif token in metadata_dict[doc]["genre"]:
+            if token == doc:  
+                tf_idf *= 2
+                
+            token_lower = token.lower()
+            
+            if token_lower == metadata_dict[doc]["title"].lower():
+                tf_idf *= TITLE_BOOST
+                entity_match = token_lower
+            elif token_lower == metadata_dict[doc]["genre"].lower():
                 tf_idf *= GENRE_BOOST
-            elif token in metadata_dict[doc]["developer"]:
+                entity_match = token_lower
+            elif token_lower == metadata_dict[doc]["developer"].lower():
                 tf_idf *= DEVELOPER_BOOST
-            elif token in metadata_dict[doc]["publisher"]:
+                entity_match = token_lower
+            elif token_lower == metadata_dict[doc]["publisher"].lower():
                 tf_idf *= PUBLISHER_BOOST
-            elif token in metadata_dict[doc]["rating"]:
+                entity_match = token_lower
+            elif token_lower == metadata_dict[doc]["rating"].lower():
                 tf_idf *= RATING_BOOST
-            elif token in metadata_dict[doc]["releaseDate"]:
+                entity_match = token_lower
+            elif token_lower == metadata_dict[doc]["releaseDate"].lower():
                 tf_idf *= RELEASE_DATE_BOOST
+                entity_match = token_lower
 
             if doc not in weights:
                 weights[doc] = {}
             weights[doc][token] = tf_idf
+
+    for doc, terms in weights.items():
+        additional_weights = {}
+        for token, weight in terms.items():
+            sub_terms = token.split()  
+            for term in sub_terms:
+                term_weight = weight * 20 
+                if term not in additional_weights:
+                    additional_weights[term] = term_weight
+                else:
+                    additional_weights[term] += term_weight
+
+        for term, weight in additional_weights.items():
+            if term not in weights[doc]:
+                weights[doc][term] = weight
+            else:
+                weights[doc][term] += weight
+
     return weights
+
 
 
 def normalize_document_weights(weights):
@@ -156,13 +219,14 @@ def normalize_document_weights(weights):
 
 
 
-def calculate_query_weights(query, entity_matches, matching_keywords):
+def calculate_query_weights(query, game_entities):
     print(f"Calculating weights for: {query}")
 
     count = get_total_documents()
     query_weights = {}
+
     for term in query:
-        tf = math.log(1 + query.count(term)) 
+        tf = math.log(1 + query.count(term))  # Term Frequency
         idf = get_doc_count_term_frequency(term)  
         inverse_document_frequency = math.log(count / idf) if idf > 0 else 0
 
@@ -170,7 +234,12 @@ def calculate_query_weights(query, entity_matches, matching_keywords):
         print(f"\nTerm: {term}")
         print(f"Initial weight: {weight}")
 
-        #boost metadata checks 
+        for entity_type, values in game_entities.items():
+            if any(term.lower() == value.lower() for value in values):
+                weight *= 2  
+                print(f"Exact entity match boost applied to {term}: {weight}")
+                break  
+
         if any(term in metadata["title"] for metadata in metadata_dict.values()):
             weight *= TITLE_BOOST
             print(f"Title boost applied: {weight}")
@@ -193,7 +262,9 @@ def calculate_query_weights(query, entity_matches, matching_keywords):
             print("No boost applied")
 
         query_weights[term] = weight
+
     return query_weights
+
 
 
 def normalize_query_weights(query_weights):
@@ -230,41 +301,44 @@ def compute_cosine_similarity(query_weights, doc_weights):
         dot_product = sum(query_weights.get(term, 0) * term_weights.get(term, 0) for term in query_weights)
         cosine_similarities[doc_id] = dot_product / (query_magnitude * doc_magnitude)
 
-    # Filter docs with a score > 0.05
     filtered_docs = [(doc_id, score) for doc_id, score in cosine_similarities.items() if score > 0.01]
 
-    # Sort filtered docs by cosine similarity
     sorted_filtered_docs = sorted(filtered_docs, key=lambda item: item[1], reverse=True)
 
-    # Limit to top 10 results
     top_docs = sorted_filtered_docs[:10]
 
     return top_docs
 
 
+
+
 def precision_ten(doc_array, relevant_docs_for_query):
+    # Validate input data types
+    if not isinstance(doc_array, list) or not isinstance(relevant_docs_for_query, list):
+        return 0  # Return 0 if the input is invalid
+
     if not doc_array:
         return 0
-    # Count how many relevant documents are in the top N retrieved documents
-    relevant_count = sum(1 for doc_id, _ in doc_array if doc_id in relevant_docs_for_query)
-    return relevant_count / len(doc_array)
+    
+    relevant_count = sum(1 for doc_id, _ in doc_array if isinstance(doc_id, str) and doc_id in relevant_docs_for_query)
+    
+    return relevant_count / len(doc_array) if len(doc_array) > 0 else 0
 
 
 def calculate_precision_recall(retrieved_docs, relevant_docs_for_query, top_n=10):
-    # Limit to the top N retrieved documents
+    # Validate input data types
+    if not isinstance(retrieved_docs, list) or not isinstance(relevant_docs_for_query, list):
+        return 0, 0  # Return (0, 0) if the input is invalid
+
     retrieved_docs_top_n = retrieved_docs[:top_n]
     
-    # Count how many relevant documents are in the top N retrieved documents
-    relevant_count = sum(1 for doc_id, _ in retrieved_docs_top_n if doc_id in relevant_docs_for_query)
-
-    # Calculate precision: relevant retrieved docs / total retrieved docs (top_n)
-    precision = relevant_count / top_n if len(retrieved_docs_top_n) > 0 else 0
+    # Validate retrieved_docs_top_n contains tuples of (doc_id, score)
+    relevant_count = sum(1 for doc_id, _ in retrieved_docs_top_n if isinstance(doc_id, str) and doc_id in relevant_docs_for_query)
     
-    # Calculate recall: relevant retrieved docs / total relevant docs (capped at 10)
+    precision = relevant_count / top_n if len(retrieved_docs_top_n) > 0 else 0
     recall = relevant_count / min(len(relevant_docs_for_query), 10) if len(relevant_docs_for_query) > 0 else 0
-
+    
     return precision, recall
-
 
 
 # Getters for testing 
