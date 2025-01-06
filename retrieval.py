@@ -2,7 +2,9 @@
 # Author : Oliver Fawkes
 # Description : Functions to extract url strings from given csv file, then to scrape relevant data from html and finally to save the data in pickle files. 
 # Also includes function to load data from pickle files.
-# History : 12/12/2024 - v1 .00, 16/12/2024 - v1 .10
+# History : 
+# 12/12/2024 - v1 .00 - Add data scraping from downloaded html files,formatted text using nlp, added methods to load pickle files.
+# 16/12/2024 - v1 .10 - Added better formatting.
 
 
 import csv

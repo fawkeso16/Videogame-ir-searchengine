@@ -10,6 +10,7 @@
 #  27/12/2024 - v1. 40 - many more 'logic' bug fixes, changed boosts 
 #  29/12/2024 - v1. 50 - Implemetnted NER structure, big changes to all methods, tokenising text - added entity matching fully altered layout, removed redundant processing of text as chnaged to use mtadata soley
 #  - alterted weighting for both query and document to account for exact matches of enittys
+#  03/01/2024 - 06/01/2024  - massive bug fixes, fixed logic and sytax issues after new implementations. mostly to do with entity matching during tokeising and weighting.
 
 import re
 import spacy
@@ -25,14 +26,13 @@ unwanted_words = ["game", "games", "ps2"]
 nlp = spacy.load("en_core_web_sm", disable=["ner"])  
 
 
-
 inverted_index_dict = {}
 metadata_dict = {}  
 weights = {}
 unique_terms = set()  
 
 
-#Setting up NER
+#Setting up NER with only custom patter creation. lables = TITLE, GENRE, PUBLISHER, DEVLEOPER, RELEASEDATE, RATING
 with open('processed_game_entities.pkl', 'rb') as f:
     processed_game_entities = pickle.load(f)
     
@@ -48,15 +48,16 @@ patterns = create_patterns(processed_game_entities)
 ruler.add_patterns(patterns)
 
 
-#weigth boosts
-TITLE_BOOST = 30
-GENRE_BOOST = 30
-PUBLISHER_BOOST = 30
-DEVELOPER_BOOST = 30
-RATING_BOOST = 30
-RELEASE_DATE_BOOST = 10
+#weighh boosts
+TITLE_BOOST = 3
+GENRE_BOOST = 15
+PUBLISHER_BOOST = 15
+DEVELOPER_BOOST = 15
+RATING_BOOST = 50
+RELEASE_DATE_BOOST = 1
 
 
+#method to populate inverted index and metadata.
 def addToInvertedIndex(text, docname, metadata):
     if docname not in metadata_dict:
         metadata_dict[docname] = metadata
@@ -72,7 +73,7 @@ def addToInvertedIndex(text, docname, metadata):
         inverted_index_dict[token]["total_tf"] += 1  
 
 
-# Useful methods for main functionality
+######### Helper Methods ######### 
 def get_term_frequency(term):
     return inverted_index_dict.get(term, {}).get("total_tf", 0)
 
@@ -100,11 +101,12 @@ def get_all_terms_in_document(document_id):
 
 def clean_text(text):
     return ''.join([char.lower() for char in text if char.isalnum() or char.isspace()])
+######### end of helper methods ######### 
 
+#methodto tokenise text, to nlp text and match any entitys.
 def tokenize_texts(metadata_dict):
     for file_name, game_metadata in metadata_dict.items():
         filtered_tokens, tokens = [], []
-
         for field, value in game_metadata.items():
             if isinstance(value, str) and value.strip():
                 tokens.extend(value.strip().lower().split())
@@ -129,9 +131,9 @@ def tokenize_texts(metadata_dict):
             else:
                 filtered_tokens.append(token)
 
+
         metadata_dict[file_name]['tokens'] = filtered_tokens
         addToInvertedIndex(filtered_tokens, file_name, metadata_dict[file_name])
-
 
 
 def tokenize_query(query):
@@ -144,152 +146,111 @@ def tokenize_query(query):
         and token.lemma_.lower() not in keywords
         and stemmer.stem(token.lemma_.lower()) not in stemmed_keywords
     ]
-    
     # print("filtered query : ", filtered_tokens)
     return filtered_tokens
 
 
 # Calculating tf-idf weight and normalizing methods, used slighly altered tf formula when working with querys
 def calculate_document_weights():
-    entity_match = ''
-    weights = {}  
+    weights = {}
     doc_count = get_total_documents()
 
-    for token, term_data in inverted_index_dict.items():
+    for term, term_data in inverted_index_dict.items():
         doc_frequency = term_data["doc_frequency"]
-    
         df = len(doc_frequency)
         if df == 0:
-            continue  
+            continue
         idf = math.log(1 + (doc_count / (1 + df)))
-    
-        for doc, tf in doc_frequency.items():
+
+        for doc_id, tf in doc_frequency.items():
             term_frequency = math.log(1 + tf["tf"]) / term_data["total_tf"]
-            tf_idf = term_frequency * idf
+            weight = term_frequency * idf
 
-            if token == doc:  
-                tf_idf *= 2
-                
-            token_lower = token.lower()
-            
-            if token_lower == metadata_dict[doc]["title"].lower():
-                tf_idf *= TITLE_BOOST
-                entity_match = token_lower
-            elif token_lower == metadata_dict[doc]["genre"].lower():
-                tf_idf *= GENRE_BOOST
-                entity_match = token_lower
-            elif token_lower == metadata_dict[doc]["developer"].lower():
-                tf_idf *= DEVELOPER_BOOST
-                entity_match = token_lower
-            elif token_lower == metadata_dict[doc]["publisher"].lower():
-                tf_idf *= PUBLISHER_BOOST
-                entity_match = token_lower
-            elif token_lower == metadata_dict[doc]["rating"].lower():
-                tf_idf *= RATING_BOOST
-                entity_match = token_lower
-            elif token_lower == metadata_dict[doc]["releaseDate"].lower():
-                tf_idf *= RELEASE_DATE_BOOST
-                entity_match = token_lower
+            entity_matches = {ent.text.lower(): ent.text for ent in nlp(term).ents if ent.label_ in processed_game_entities}
+            if entity_matches:
+                weight *= 3
 
-            if doc not in weights:
-                weights[doc] = {}
-            weights[doc][token] = tf_idf
-
-    for doc, terms in weights.items():
-        additional_weights = {}
-        for token, weight in terms.items():
-            sub_terms = token.split()  
-            for term in sub_terms:
-                term_weight = weight * 10
-                if term not in additional_weights:
-                    additional_weights[term] = term_weight
-                else:
-                    additional_weights[term] += term_weight
-
-        for term, weight in additional_weights.items():
-            if term not in weights[doc]:
-                weights[doc][term] = weight
-            else:
-                weights[doc][term] += weight
-
+            if any(term in metadata["title"] for metadata in metadata_dict.values()):
+                weight *= TITLE_BOOST
+            elif any(term in metadata["genre"] for metadata in metadata_dict.values()):
+                weight *= GENRE_BOOST
+            elif any(term in metadata["developer"] for metadata in metadata_dict.values()):
+                weight *= DEVELOPER_BOOST
+            elif any(term in metadata["publisher"] for metadata in metadata_dict.values()):
+                weight *= PUBLISHER_BOOST
+            elif any(term in metadata["rating"] for metadata in metadata_dict.values()):
+                weight *= RATING_BOOST
+            elif any(term in metadata["releaseDate"] for metadata in metadata_dict.values()):
+                weight *= RELEASE_DATE_BOOST  
+            if doc_id not in weights:
+                weights[doc_id] = {}
+            weights[doc_id][term] = weight
     return weights
-
 
 
 def normalize_document_weights(weights):
     normalized_weights = {}
-    
-    for doc_id in weights:
-        magnitude = math.sqrt(sum(weight ** 2 for weight in weights[doc_id].values()))
-        normalized_weights[doc_id] = {
-            term: (weight / magnitude) if magnitude != 0 else 0
-            for term, weight in weights[doc_id].items()
-        }
+    for doc_id, doc_weights in weights.items():
+        magnitude = math.sqrt(sum(weight ** 2 for weight in doc_weights.values()))
+        
+        if magnitude == 0:
+            normalized_weights[doc_id] = {term: 0 for term in doc_weights}
+        else:
+            normalized_weights[doc_id] = {
+                term: weight / magnitude for term, weight in doc_weights.items()
+            }
+
     return normalized_weights
 
 
-
-def calculate_query_weights(query, synonyms):
+#weighting query terms, various boosts based off of entity matches and syonyms.
+def calculate_query_weights(query, synonyms, entity_matches):
     print(f"Calculating weights for: {query}")
 
     count = get_total_documents()
     query_weights = {}
 
     for term in query:
-        tf = math.log(1 + query.count(term))  # Term Frequency
-        idf = get_doc_count_term_frequency(term)  
-        inverse_document_frequency = math.log(count / idf) if idf > 0 else 0
+        tf = math.log(1 + query.count(term))  
+        doc_frequency = get_doc_count_term_frequency(term)
+        idf = math.log(count / (1 + doc_frequency)) if doc_frequency > 0 else 0
 
-        weight = tf * inverse_document_frequency
-        print(f"\nTerm: {term}")
-        print(f"Initial weight: {weight}")
+        weight = tf * idf
 
         if term in synonyms:
-            weight *= 0.2
+            weight *= 0.1
             print(f"Synonym penalty applied to {term}: {weight}")
-
-        for entity_type, values in processed_game_entities.items():
-            if any(term.lower() == value.lower() for value in values):
-                weight *= 2  
-                print(f"Exact entity match boost applied to {term}: {weight}")
-                break  
-
+        if term in entity_matches.values():
+            weight *= 3
+            print(f"Big entity match boost applied to {term}: {weight}")
         if any(term in metadata["title"] for metadata in metadata_dict.values()):
             weight *= TITLE_BOOST
-            print(f"Title boost applied: {weight}")
         elif any(term in metadata["genre"] for metadata in metadata_dict.values()):
             weight *= GENRE_BOOST
-            print(f"Genre boost applied: {weight}")
         elif any(term in metadata["developer"] for metadata in metadata_dict.values()):
             weight *= DEVELOPER_BOOST
-            print(f"Developer boost applied: {weight}")
         elif any(term in metadata["publisher"] for metadata in metadata_dict.values()):
             weight *= PUBLISHER_BOOST
-            print(f"Publisher boost applied: {weight}")
         elif any(term in metadata["rating"] for metadata in metadata_dict.values()):
             weight *= RATING_BOOST
-            print(f"Rating boost applied: {weight}")
         elif any(term in metadata["releaseDate"] for metadata in metadata_dict.values()):
             weight *= RELEASE_DATE_BOOST
-            print(f"Release date boost applied: {weight}")
-        else:
-            print("No boost applied")
 
         query_weights[term] = weight
-
     return query_weights
-
-
 
 
 def normalize_query_weights(query_weights):
     magnitude = math.sqrt(sum(weight ** 2 for weight in query_weights.values()))
-    
-    normalized_query = {
-        term: (weight / magnitude) if magnitude != 0 else 0
-        for term, weight in query_weights.items()
+    if magnitude == 0:
+        return {term: 0 for term in query_weights}
+
+    normalized_weights = {
+        term: weight/magnitude for term, weight in query_weights.items()
     }
-    return normalized_query
+    
+    return normalized_weights
+
 
 # Matrix generation
 def generate_normalized_weighted_matrix(weights):
@@ -303,10 +264,10 @@ def generate_normalized_weighted_matrix(weights):
 def compute_cosine_similarity(query_weights, doc_weights):
     cosine_similarities = {}
     query_magnitude = math.sqrt(sum(weight ** 2 for weight in query_weights.values()))
+    
     if query_magnitude == 0:
-        return [], 0.0  # Return an empty list and 0 relevance if the query has no terms
+        return [], 0.0  
 
-    # Compute cosine similarities
     for doc_id, term_weights in doc_weights.items():
         doc_magnitude = math.sqrt(sum(weight ** 2 for weight in term_weights.values()))
         if doc_magnitude == 0:
@@ -314,46 +275,40 @@ def compute_cosine_similarity(query_weights, doc_weights):
             continue
         
         dot_product = sum(query_weights.get(term, 0) * term_weights.get(term, 0) for term in query_weights)
-        cosine_similarities[doc_id] = dot_product / (query_magnitude * doc_magnitude)
-
-    filtered_docs = [(doc_id, score) for doc_id, score in cosine_similarities.items() if score > 0.1]
-
+        cosine_similarity = dot_product / (query_magnitude * doc_magnitude)
+        cosine_similarities[doc_id] = cosine_similarity
+        
+    filtered_docs = [(doc_id, score) for doc_id, score in cosine_similarities.items() if score > 0]
     sorted_filtered_docs = sorted(filtered_docs, key=lambda item: item[1], reverse=True)
-
     top_docs = sorted_filtered_docs[:10]
-
-    return top_docs
-
-
+    return top_docs,
 
 
 def precision_ten(doc_array, relevant_docs_for_query):
-    # Validate input data types
-    if not isinstance(doc_array, list) or not isinstance(relevant_docs_for_query, list):
-        return 0  # Return 0 if the input is invalid
-
-    if not doc_array:
+    if not doc_array or not relevant_docs_for_query:
         return 0
     
     relevant_count = sum(1 for doc_id, _ in doc_array if isinstance(doc_id, str) and doc_id in relevant_docs_for_query)
-    
-    return relevant_count / len(doc_array) if len(doc_array) > 0 else 0
+    return relevant_count / len(doc_array)
 
 
-def calculate_precision_recall(retrieved_docs, relevant_docs_for_query, top_n=10):
-    # Validate input data types
-    if not isinstance(retrieved_docs, list) or not isinstance(relevant_docs_for_query, list):
-        return 0, 0  # Return (0, 0) if the input is invalid
-
-    retrieved_docs_top_n = retrieved_docs[:top_n]
+def calculate_precision_recall(retrieved_docs, relevant_docs_for_query):
+    if type(retrieved_docs) != list or type(relevant_docs_for_query) != list:
+        return 0, 0  
     
-    # Validate retrieved_docs_top_n contains tuples of (doc_id, score)
-    relevant_count = sum(1 for doc_id, _ in retrieved_docs_top_n if isinstance(doc_id, str) and doc_id in relevant_docs_for_query)
+    top10docs = retrieved_docs[:10]
     
-    precision = relevant_count / top_n if len(retrieved_docs_top_n) > 0 else 0
-    recall = relevant_count / min(len(relevant_docs_for_query), 10) if len(relevant_docs_for_query) > 0 else 0
+    relevant_count = 0
+    for doc_id, _ in top10docs:
+        if type(doc_id) == str and doc_id in relevant_docs_for_query:
+            relevant_count += 1
+    
+    precision = relevant_count / len(top10docs) if len(top10docs) > 0 else 0
+    recall = relevant_count / len(relevant_docs_for_query) if len(relevant_docs_for_query) > 0 else 0
     
     return precision, recall
+
+
 
 
 # Getters for testing 

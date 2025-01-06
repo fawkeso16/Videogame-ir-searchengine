@@ -63,7 +63,6 @@ directory = "/Users/oliverfawkes/Downloads/videogames"
     
 
 # lemmatized_metadata = lemmatize_metadata(metadata_dict) 
-
 # def clean_metadata(metadata_dict):
 #     for file_name, game_metadata in metadata_dict.items():
 #         for field, field_value in game_metadata.items():
@@ -87,14 +86,65 @@ directory = "/Users/oliverfawkes/Downloads/videogames"
 #             data_dict[key] = cleaned_list
 #     return data_dict
 
-
-# with open('processed_game_entities.pkl', 'wb') as f:
-#     pickle.dump(processed_game_entities, f)
-
+# print(meta)
 tokenize_texts(meta)
 weights = calculate_document_weights()
 normalize = normalize_document_weights(weights)
 
+
+# def simplify_ratings(rating):
+#     rating_lower = rating.lower()  # Convert to lowercase for uniformity
+#     if "teen" in rating_lower:
+#         return "teen"
+#     elif "everyone" in rating_lower:
+#         return "everyone"
+#     elif "mature" in rating_lower:
+#         return "mature"
+#     elif "pending" in rating_lower:
+#         return "rating pending"
+#     elif "tba" in rating_lower:
+#         return "tba"
+#     else:
+#         return rating_lower  # Return the original rating if no match
+
+
+# def clean_titles(titles):
+#     cleaned_titles = []
+#     for title in titles:
+#         # Convert to lowercase
+#         title = title.lower()
+        
+#         # Remove punctuation
+#         title = re.sub(r'[^\w\s]', '', title)
+        
+#         # Replace double spaces with a single space
+#         title = re.sub(r'\s+', ' ', title)
+        
+#         # Combine terms like 'hawk s' to 'hawks'
+#         title = re.sub(r'\s+s\b', 's', title)
+        
+#         cleaned_titles.append(title)
+#     return cleaned_titles
+
+# ratings2 = simplify_ratings(ratings)
+# processed_game_entities["RATING"] = ratings2
+
+# for game, details in meta.items():
+#     simplified_rating = simplify_ratings(details['rating'])  
+#     details['rating'] = simplified_rating  # Update the game's rating field
+
+# ratings = [rating.lower() for rating in processed_game_entities["RATING"]]    
+
+# print(ratings)
+# # titles = clean_titles(processed_game_entities["TITLE"])
+
+# processed_game_entities["RATING"] = ratings
+
+
+
+# print(processed_game_entities)
+
+# print(meta)
 testqueries = {
     "testquery1": "ICO",
     "testquery2": "Okami",
@@ -105,11 +155,13 @@ testqueries = {
     "testquery7": "Game Developed by Eurocom",
     "testquery8": "Game Published by Activision",
     "testquery9": "Game Published by Sony Computer Entertainment",
-    "testquery10": "Teen ",
+    "testquery10": "Teen game ps2",
  }
 
 # # # Initialize the plot
-plt.figure(figsize=(10, 7))
+# plt.figure(figsize=(10, 7))
+
+# print(processed_game_entities)
 
 for query_key, query_value in testqueries.items():
     print(f"Processing Query: {query_key} - {query_value}") 
@@ -118,48 +170,87 @@ for query_key, query_value in testqueries.items():
     print(weighted_query)
     retrieved_docs = compute_cosine_similarity(weighted_query, weights)
     
-    print(f"Relevant Docs for {query_key}: {relevant_docs_for_query}")  
+    # print(f"Relevant Docs for {query_key}: {relevant_docs_for_query}")  
     print(f"Retrieved Docs for {query_key}: {retrieved_docs[:10]}...")  
 
     precision = precision_ten(retrieved_docs, relevant_docs_for_query)
     recall = calculate_precision_recall(retrieved_docs, relevant_docs_for_query)[1]  
     
     print(f"Precision: {precision:.2f}, Recall: {recall:.2f}") 
-    label_text = f"{query_key}: Precision={precision:.2f}, Recall={recall:.2f}"  
-    plt.scatter(recall, precision, marker="o", label=label_text)
+    # label_text = f"{query_key}: Precision={precision:.2f}, Recall={recall:.2f}"  
+    # plt.scatter(recall, precision, marker="o", label=label_text)
 # print(processed_game_entities["PUBLISHER"])
+# print(processed_game_entities['RATING'])
 
-# # Customize the plot
-plt.title("Precision-Recall Points for All Queries")
-plt.xlabel("Recall")
-plt.ylabel("Precision")
-plt.grid(True)
-plt.legend(loc="upper left", bbox_to_anchor=(1, 1), fontsize='small')
+# print(processed_game_entities)
 
-plt.tight_layout()  
-plt.show()
+# sets = {}
+
+# # Loop through the dictionary and handle duplicates by splitting strings and creating sets
+# for key, values in processed_game_entities.items():
+#     # Split values by comma, strip whitespace, and convert to a set
+#     flattened_values = {val.strip() for item in values for val in item.split(',')}
+#     sets[key] = flattened_values
+
+# # Print the resulting sets
+# print(sets)
+
+# with open('processed_game_entities.pkl', 'wb') as f:
+#     pickle.dump(sets, f)
 
 
-data5 = {
-    "Testquery1": ('ico', 0.9853547203818317),
-    "Testquery2": ('okami', 0.8993625048491657),
-    "Testquery3": ('devil-kings', 0.999425768731038),
-    "Testquery4": ('dynasty-warriors-4', 0.017154140724177452),
-    "Testquery5": ('mlb-06-the-show', 0.25512592051057914),
-    "Testquery6": ('cabelas-big-game-hunter', 0.9985976776678205),
-    "Testquery7": ('james-bond-007-nightfire', 0.9839732764530986),
-    "Testquery8": ('x-men-z-axis', 0.6589016378006799),
-    "Testquery9": ('rise-to-honor', 0.4681991328963991),
-    "Testquery10": ('the-simpsons', 0.053610254285895546),
- }
+# metadata = getMetadata()
+
+# Print metadata for all documents in the list
+# debug_files = [
+#     'call-of-duty-finest-hour',
+#     'wakeboarding-unleashed-featuring-shaun-murray',
+#     'x-men-legends',
+#     'x-men-z-axis',
+#     'shrek-superslam',
+#     'spider-man-trilogy',
+#     'true-crime-streets-of-la',
+#     'gun',
+#     'tony-hawks-underground',
+#     'tony-hawks-underground-2'
+# ]
+
+# for file_name, game_metadata in metadata.items():
+#     if file_name in debug_files:
+#         print(f"\nMetadata for {file_name}:")
+#         for field, value in game_metadata.items():
+#             print(f"{field}: {value}")
+# # # Customize the plot
+# plt.title("Precision-Recall Points for All Queries")
+# plt.xlabel("Recall")
+# plt.ylabel("Precision")
+# plt.grid(True)
+# plt.legend(loc="upper left", bbox_to_anchor=(1, 1), fontsize='small')
+
+# plt.tight_layout()  
+# plt.show()
+
+
+# data5 = {
+#     "Testquery1": ('ico', 0.994638054774928),
+#     "Testquery2": ('okami', 0.9571932634657468),
+#     "Testquery3": ('devil-kings', 0.43613882140538535),
+#     "Testquery4": ('dynasty-warriors-4', 0.8089893791643922),
+#     "Testquery5": ('mlb-06-the-show', 0.19840834811182861),
+#     "Testquery6": ('cabelas-big-game-hunter', 0.984193009227017),
+#     "Testquery7": ('james-bond-007-nightfire', 0.9733904578069024),
+#     "Testquery8": ('x-men-z-axis', 0.5754608701782999),
+#     "Testquery9": ('rise-to-honor', 0.2785146736489353),
+#     "Testquery10": ('the-simpsons', 0.031452981678974465),
+#  }
 
 # # # # # Extract queries and similarity scores
-queries = list(data5.keys())
-scores = [item[1] for item in data5.values()]
+# queries = list(data5.keys())
+# scores = [item[1] for item in data5.values()]
 
-print(np.mean(scores))
+# print(np.mean(scores))
 
-# # Plotting
+# # # Plotting
 # plt.figure(figsize=(10, 6))
 # plt.plot(queries, scores, marker='o', linestyle='-', color='b', label="Cosine Similarity")
 # plt.xticks(rotation=45, ha='right')  # Rotate x-axis labels for better readability
