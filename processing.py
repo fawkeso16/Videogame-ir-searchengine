@@ -2,7 +2,7 @@
 # Author : Oliver Fawkes
 # Description : contains methods to caluclate weights of documetns using tf-idf weighting via an inverted index, and compare them to a weighted query and return ranked reusults.
 # History : 
-#  12/12/2024 - v1 .00 - intilal methods added, inverted index creation, and method to populate
+#  12/12/2024 - v1 .00 - intitial methods added, inverted index creation, and method to populate
 #  16/12/2024 - v1 .10  - tokenizing and lemmatizing text mthods added, helper methods added for future calulations
 #  17/12/2024 - v1. 20 -  document and query weghting and normalization added
 #  18/12/2024 - v1. 30 -  cosine similarity added
@@ -12,7 +12,6 @@
 #  - alterted weighting for both query and document to account for exact matches of enittys
 #  03/01/2024 - 06/01/2024  - massive bug fixes, fixed logic and sytax issues after new implementations. mostly to do with entity matching during tokeising and weighting.
 
-import re
 import spacy
 import math
 import pandas as pd
@@ -32,8 +31,8 @@ weights = {}
 unique_terms = set()  
 
 
-#Setting up NER with only custom patter creation. lables = TITLE, GENRE, PUBLISHER, DEVLEOPER, RELEASEDATE, RATING
-with open('processed_game_entities.pkl', 'rb') as f:
+#Setting up NER with only custom pattern creation. lables = TITLE, GENRE, PUBLISHER, DEVLEOPER, RELEASEDATE, RATING
+with open('Videogame-ir-searchengine/processed_game_entities.pkl', 'rb') as f:
     processed_game_entities = pickle.load(f)
     
 ruler = nlp.add_pipe("entity_ruler", before="ner")
@@ -48,13 +47,13 @@ patterns = create_patterns(processed_game_entities)
 ruler.add_patterns(patterns)
 
 
-#weighh boosts
-TITLE_BOOST = 3
+#weight boosts, tried to scale in proportion to commonaltlity between terms
+TITLE_BOOST = 5
 GENRE_BOOST = 15
 PUBLISHER_BOOST = 15
 DEVELOPER_BOOST = 15
 RATING_BOOST = 50
-RELEASE_DATE_BOOST = 1
+RELEASE_DATE_BOOST = 5
 
 
 #method to populate inverted index and metadata.
@@ -130,7 +129,12 @@ def tokenize_texts(metadata_dict):
                     filtered_tokens.extend(entity_terms)
             else:
                 filtered_tokens.append(token)
+        filename = file_name.split('-')
 
+        for token in filename:
+            filtered_tokens.append(token)
+
+        # print(filename)
 
         metadata_dict[file_name]['tokens'] = filtered_tokens
         addToInvertedIndex(filtered_tokens, file_name, metadata_dict[file_name])
@@ -203,8 +207,8 @@ def normalize_document_weights(weights):
     return normalized_weights
 
 
-#weighting query terms, various boosts based off of entity matches and syonyms.
-def calculate_query_weights(query, synonyms, entity_matches):
+#weighting query terms, various boosts based off of entity matches and synonyms.
+def calculate_query_weights(query, entity_matches):
     print(f"Calculating weights for: {query}")
 
     count = get_total_documents()
@@ -217,12 +221,12 @@ def calculate_query_weights(query, synonyms, entity_matches):
 
         weight = tf * idf
 
-        if term in synonyms:
-            weight *= 0.1
-            print(f"Synonym penalty applied to {term}: {weight}")
+        # if term in synonyms:
+        #     weight *= 0.1
+            # print(f"Synonym penalty applied to {term}: {weight}")
         if term in entity_matches.values():
             weight *= 3
-            print(f"Big entity match boost applied to {term}: {weight}")
+            # print(f"Big entity match boost applied to {term}: {weight}")
         if any(term in metadata["title"] for metadata in metadata_dict.values()):
             weight *= TITLE_BOOST
         elif any(term in metadata["genre"] for metadata in metadata_dict.values()):
@@ -281,33 +285,39 @@ def compute_cosine_similarity(query_weights, doc_weights):
     filtered_docs = [(doc_id, score) for doc_id, score in cosine_similarities.items() if score > 0]
     sorted_filtered_docs = sorted(filtered_docs, key=lambda item: item[1], reverse=True)
     top_docs = sorted_filtered_docs[:10]
-    return top_docs,
+    return top_docs
 
 
-def precision_ten(doc_array, relevant_docs_for_query):
+def precision_and_recall(doc_array, relevant_docs_for_query):
     if not doc_array or not relevant_docs_for_query:
-        return 0
+        return 0, 0 
     
-    relevant_count = sum(1 for doc_id, _ in doc_array if isinstance(doc_id, str) and doc_id in relevant_docs_for_query)
-    return relevant_count / len(doc_array)
-
-
-def calculate_precision_recall(retrieved_docs, relevant_docs_for_query):
-    if type(retrieved_docs) != list or type(relevant_docs_for_query) != list:
-        return 0, 0  
-    
-    top10docs = retrieved_docs[:10]
-    
+    docs_array = doc_array[0]
     relevant_count = 0
-    for doc_id, _ in top10docs:
-        if type(doc_id) == str and doc_id in relevant_docs_for_query:
+
+    relevant_docs_clean = [r.strip().lower().strip('-') for r in relevant_docs_for_query]
+    
+    top_docs = doc_array[:10]
+    
+    for doc, score in top_docs:
+        doc_clean = doc.strip().lower().strip('-')
+        if doc_clean in relevant_docs_clean:
             relevant_count += 1
-    
-    precision = relevant_count / len(top10docs) if len(top10docs) > 0 else 0
-    recall = relevant_count / len(relevant_docs_for_query) if len(relevant_docs_for_query) > 0 else 0
-    
+
+    precision = relevant_count / min(10, len(top_docs))
+    recall = relevant_count / min(10, len(relevant_docs_for_query)) 
+
     return precision, recall
 
+
+def final_results(doc_array):
+    finalranks = []
+    rank = 1
+    top_docs = doc_array[:10]
+    for doc_name, score in top_docs:
+        finalranks.append((rank, doc_name + '.html', score))  # Tuple with three elements
+        rank += 1
+    return finalranks
 
 
 
@@ -322,16 +332,53 @@ def getMetadata():
     return metadata_dict
 
 
-#mostly used for debugging 
-def lemmatize_metadata(metadata_dict):
-    processed_dict = {}
     
-    for filename, metadata in metadata_dict.items():
-        processed_dict[filename] = {}
-        for field, value in metadata.items():
-            value = ' '.join(str(value).split())
-            doc = nlp(value)
-            processed_value = ' '.join([token.lemma_.lower() for token in doc if token is not token.is_punct])
-            processed_dict[filename][field] = processed_value
+#add entites to file
+def add_to_entities(key, value):
+    with open('Videogame-ir-searchengine/processed_game_entities.pkl', 'rb') as f:
+        game_entities = pickle.load(f)
     
-    return processed_dict
+    if key not in game_entities:
+        raise KeyError(f"Invalid key: {key}. Valid keys are: {', '.join(game_entities.keys())}")
+    
+    doc = nlp(value.lower())  
+    lemmatized_value = " ".join([token.lemma_ for token in doc])  
+    
+    game_entities[key].append(lemmatized_value)
+
+    with open('Videogame-ir-searchengine/processed_game_entities.pkl', 'wb') as f:
+        pickle.dump(game_entities, f)
+
+
+def save_new_metadata_dict(dict):
+    if dict:
+        with open('Videogame-ir-searchengine/metadata_dict.pkl', 'wb') as f:
+            pickle.dump(dict, f)
+
+
+def save_new_relevant_docs(dict):
+    if dict:
+        with open('Videogame-ir-searchengine/relevant_docs.pkl', 'wb') as f:
+            pickle.dump(dict, f)
+    
+
+def add_to_relevant_docs(key, value):
+    with open('Videogame-ir-searchengine/relevant_docs.pkl', 'rb') as f:
+        docs = pickle.load(f)
+    if key not in docs:
+        raise KeyError(f"KEY IS NOT IN HERE, Valid keys are: {', '.join(docs.keys())}")
+    doc = nlp(value.lower())  
+    docs[key].append(doc)
+    with open('Videogame-ir-searchengine/relevant_docs.pkl', 'wb') as f:
+        pickle.dump(docs, f)
+
+
+    
+
+def save_new_game_enties(dict):
+    if dict:
+        with open('Videogame-ir-searchengine/processed_game_entities.pkl', 'wb') as f:
+            pickle.dump(dict, f)
+
+
+

@@ -1,1 +1,1 @@
-IR system using tf-idf weighting. Basic search engine for a videogame depository. Techiniques used: natural language processing, tf-idf weighting, consine similarity, theasaurus based query expansion, custom named entity recognition, 
+IR system using tf-idf weighting. Basic search engine for a videogame depository. Techiniques used: natural language processing, tf-idf weighting, consine similarity, theasaurus based query expansion, custom named entity recognition, precision 10 accuracy testing.

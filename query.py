@@ -11,7 +11,7 @@
 #  07/01/2024 - v1.60 - Final bug fixes , improved handling of entity or better search results, aslso removed keyword matching (was irrelevant), cleaned code and added comments.
 
 
-from processing import calculate_query_weights, get_total_documents, normalize_query_weights, tokenize_query
+from processing import calculate_query_weights, normalize_query_weights, tokenize_query
 import spacy
 import pickle
 import requests
@@ -21,7 +21,7 @@ from spacy.pipeline import EntityRuler
 nlp = spacy.load("en_core_web_sm")
 ruler = nlp.add_pipe("entity_ruler", before="ner")
 
-with open('processed_game_entities.pkl', 'rb') as f:
+with open('Videogame-ir-searchengine/processed_game_entities.pkl', 'rb') as f:
     processed_game_entities = pickle.load(f)
 
 #pattern creation
@@ -55,7 +55,7 @@ def process_query(query):
 
     doc = nlp(" ".join(filtered_query))
     entity_matches = {ent.text.lower(): ent.text for ent in doc.ents if ent.label_ in processed_game_entities}
-    print("Entity matches found:", entity_matches)
+    # print("Entity matches found:", entity_matches)
     for entity_key, original_entity in entity_matches.items():
 
         #entity matching
@@ -73,26 +73,26 @@ def process_query(query):
             if entity_key not in filtered_query:
                 filtered_query.append(entity_key)
 
-    #syonym expansion
-    expanded_query = filtered_query.copy()
-    for token in filtered_query:
-        synonyms = get_synonyms(token)
-        for synonym in synonyms:
-            if synonym not in expanded_query:
-                expanded_query.append(synonym)
-                all_synonyms.append(synonym)
+    #synonym expansion
+    # expanded_query = filtered_query.copy()
+    # for token in filtered_query:
+    #     synonyms = get_synonyms(token)
+    #     for synonym in synonyms:
+    #         if synonym not in expanded_query:
+    #             expanded_query.append(synonym)
+    #             all_synonyms.append(synonym)
 
-    return expanded_query, all_synonyms, entities
+    return filtered_query, entities
 
 
 
 def search_query(query):
     print(f"Original Query: {query}")
-    filtered_query, synonyms, entity_matches = process_query(query)
-    print(f"Filtered Query: {filtered_query}")
-    query_weights = calculate_query_weights(filtered_query, synonyms, entity_matches)
+    filtered_query, entity_matches = process_query(query)
+    # print(f"Filtered Query: {filtered_query}")
+    query_weights = calculate_query_weights(filtered_query, entity_matches)
     final_weights = normalize_query_weights(query_weights)
-    print("final weights: ", final_weights)
+    # print("final weights: ", final_weights)
 
     return final_weights
 
