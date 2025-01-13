@@ -21,7 +21,7 @@ def cosine_graph(data_dict):
     plt.show()
 
 
-def precision_recall_graph(data_dict, relevant_docs, weights):
+def precision_recall_graph_tests(data_dict, relevant_docs, weights):
 
     plt.figure(figsize=(10, 6))
 
@@ -29,15 +29,15 @@ def precision_recall_graph(data_dict, relevant_docs, weights):
         print(f"Processing Query: {query_key} - {query_value}") 
         relevant_docs_for_query = relevant_docs[query_key]    
         weighted_query = search_query(query_value)
-        # print(weighted_query)
+        print(weighted_query)
         retrieved_docs = compute_cosine_similarity(weighted_query, weights)
         
-        # print(f"Relevant Docs for {query_key}: {relevant_docs_for_query}")  
+        print(f"Relevant Docs for {query_key}: {relevant_docs_for_query}")  
         # print(f"Retrieved Docs for {query_key}: {retrieved_docs}...")  
 
         precision , recall = precision_and_recall(retrieved_docs, relevant_docs_for_query)  
         
-        # print(f"Precision: {precision:}, Recall: {recall},") 
+        print(f"Precision: {precision:}, Recall: {recall},") 
         label_text = f"{query_key}: Precision={precision}, Recall={recall}"  
         plt.scatter(recall, precision, marker="o", label=label_text)
         print(final_results(retrieved_docs))
@@ -51,3 +51,11 @@ def precision_recall_graph(data_dict, relevant_docs, weights):
 
     plt.tight_layout()  
     plt.show()
+
+def do_query_single(query, weights):
+
+    print(f"Processing Query: {query}") 
+    weighted_query = search_query(query)
+    print(weighted_query)
+    retrieved_docs = compute_cosine_similarity(weighted_query, weights)
+    print(final_results(retrieved_docs))

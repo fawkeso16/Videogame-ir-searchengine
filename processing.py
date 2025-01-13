@@ -17,12 +17,20 @@ import math
 import pandas as pd
 import pickle
 from nltk import PorterStemmer
+import config
+
 
 stemmer = PorterStemmer()
 keywords = ["title", "genre", "developer", "publisher", "release date", "rating"]
 stemmed_keywords = [stemmer.stem(word) for word in keywords]
 unwanted_words = ["game", "games", "ps2"]
 nlp = spacy.load("en_core_web_sm", disable=["ner"])  
+ruler = nlp.add_pipe("entity_ruler", before="ner")
+
+
+processed_game_entities = config.processed_game_entities
+patterns = config.patterns
+ruler.add_patterns(patterns)
 
 
 inverted_index_dict = {}
@@ -31,30 +39,20 @@ weights = {}
 unique_terms = set()  
 
 
-#Setting up NER with only custom pattern creation. lables = TITLE, GENRE, PUBLISHER, DEVLEOPER, RELEASEDATE, RATING
-with open('Videogame-ir-searchengine/processed_game_entities.pkl', 'rb') as f:
-    processed_game_entities = pickle.load(f)
-    
-ruler = nlp.add_pipe("entity_ruler", before="ner")
-def create_patterns(entities_dict):
-    patterns = []
-    for label, values in entities_dict.items():
-        for value in values:
-            patterns.append({"label": label, "pattern": value})
-    return patterns
-
-patterns = create_patterns(processed_game_entities)
-ruler.add_patterns(patterns)
-
-
 #weight boosts, tried to scale in proportion to commonaltlity between terms
-TITLE_BOOST = 5
-GENRE_BOOST = 15
-PUBLISHER_BOOST = 15
-DEVELOPER_BOOST = 15
-RATING_BOOST = 50
+TITLE_BOOST = 2
+GENRE_BOOST = 10
+PUBLISHER_BOOST = 10
+DEVELOPER_BOOST = 10
+RATING_BOOST = 20
 RELEASE_DATE_BOOST = 5
 
+TITLE_EXACT_BOOST = 5
+GENRE_EXACT_BOOST = 15
+PUBLISHER_EXACT_BOOST = 15
+DEVELOPER_EXACT_BOOST = 20
+RATING_EXACT_BOOST = 50
+RELEASE_EXACT_DATE_BOOST = 10
 
 #method to populate inverted index and metadata.
 def addToInvertedIndex(text, docname, metadata):
@@ -102,7 +100,8 @@ def clean_text(text):
     return ''.join([char.lower() for char in text if char.isalnum() or char.isspace()])
 ######### end of helper methods ######### 
 
-#methodto tokenise text, to nlp text and match any entitys.
+
+#method to tokenise text, to nlp text and match any entitys.
 def tokenize_texts(metadata_dict):
     for file_name, game_metadata in metadata_dict.items():
         filtered_tokens, tokens = [], []
@@ -134,8 +133,6 @@ def tokenize_texts(metadata_dict):
         for token in filename:
             filtered_tokens.append(token)
 
-        # print(filename)
-
         metadata_dict[file_name]['tokens'] = filtered_tokens
         addToInvertedIndex(filtered_tokens, file_name, metadata_dict[file_name])
 
@@ -150,7 +147,6 @@ def tokenize_query(query):
         and token.lemma_.lower() not in keywords
         and stemmer.stem(token.lemma_.lower()) not in stemmed_keywords
     ]
-    # print("filtered query : ", filtered_tokens)
     return filtered_tokens
 
 
@@ -174,7 +170,22 @@ def calculate_document_weights():
             if entity_matches:
                 weight *= 3
 
-            if any(term in metadata["title"] for metadata in metadata_dict.values()):
+            # First check for exact matches
+            if any(term == metadata["title"] for metadata in metadata_dict.values()):
+                weight *= TITLE_EXACT_BOOST
+            elif any(term == metadata["genre"] for metadata in metadata_dict.values()):
+                weight *= GENRE_EXACT_BOOST
+            elif any(term == metadata["developer"] for metadata in metadata_dict.values()):
+                weight *= DEVELOPER_EXACT_BOOST
+            elif any(term == metadata["publisher"] for metadata in metadata_dict.values()):
+                weight *= PUBLISHER_EXACT_BOOST
+            elif any(term == metadata["rating"] for metadata in metadata_dict.values()):
+                weight *= RATING_EXACT_BOOST
+            elif any(term == metadata["releaseDate"] for metadata in metadata_dict.values()):
+                weight *= RELEASE_EXACT_DATE_BOOST
+
+            # Then check for "any" matches
+            elif any(term in metadata["title"] for metadata in metadata_dict.values()):
                 weight *= TITLE_BOOST
             elif any(term in metadata["genre"] for metadata in metadata_dict.values()):
                 weight *= GENRE_BOOST
@@ -185,7 +196,7 @@ def calculate_document_weights():
             elif any(term in metadata["rating"] for metadata in metadata_dict.values()):
                 weight *= RATING_BOOST
             elif any(term in metadata["releaseDate"] for metadata in metadata_dict.values()):
-                weight *= RELEASE_DATE_BOOST  
+                weight *= RELEASE_DATE_BOOST
             if doc_id not in weights:
                 weights[doc_id] = {}
             weights[doc_id][term] = weight
@@ -208,7 +219,7 @@ def normalize_document_weights(weights):
 
 
 #weighting query terms, various boosts based off of entity matches and synonyms.
-def calculate_query_weights(query, entity_matches):
+def calculate_query_weights(query, entity_matches, synonyms):
     print(f"Calculating weights for: {query}")
 
     count = get_total_documents()
@@ -222,23 +233,50 @@ def calculate_query_weights(query, entity_matches):
         weight = tf * idf
 
         # if term in synonyms:
-        #     weight *= 0.1
-            # print(f"Synonym penalty applied to {term}: {weight}")
+        #     weight *= 0.2
+        #     print(f"Synonym penalty applied to {term}: {weight}")
         if term in entity_matches.values():
             weight *= 3
-            # print(f"Big entity match boost applied to {term}: {weight}")
-        if any(term in metadata["title"] for metadata in metadata_dict.values()):
+            print(f"Big entity match boost applied to {term}: {weight}")
+        # First check for exact matches
+        if any(term == metadata["title"] for metadata in metadata_dict.values()):
+            weight *= TITLE_EXACT_BOOST
+            print(f'{term} exactly matches a title and therefore has been boosted. Final weight: {weight} ')
+        elif any(term == metadata["genre"] for metadata in metadata_dict.values()):
+            weight *= GENRE_EXACT_BOOST
+            print(f'{term} exactly matches a genre and therefore has been boosted. Final weight: {weight} ')
+        elif any(term == metadata["developer"] for metadata in metadata_dict.values()):
+            weight *= DEVELOPER_EXACT_BOOST
+            print(f'{term} exactly matches a developer and therefore has been boosted. Final weight: {weight} ')
+        elif any(term == metadata["publisher"] for metadata in metadata_dict.values()):
+            weight *= PUBLISHER_EXACT_BOOST
+            print(f'{term} exactly matches a publisher and therefore has been boosted. Final weight: {weight} ')
+        elif any(term == metadata["rating"] for metadata in metadata_dict.values()):
+            weight *= RATING_EXACT_BOOST
+            print(f'{term} exactly matches a rating and therefore has been boosted. Final weight: {weight} ')
+        elif any(term == metadata["releaseDate"] for metadata in metadata_dict.values()):
+            weight *= RELEASE_EXACT_DATE_BOOST
+            print(f'{term} exactly matches a release date and therefore has been boosted. Final weight: {weight} ')
+
+        # Then check for partial matches 
+        elif any(term in metadata["title"] for metadata in metadata_dict.values()):
             weight *= TITLE_BOOST
+            print(f'{term} is a part of a title and therefore has been boosted. Final weight: {weight} ')
         elif any(term in metadata["genre"] for metadata in metadata_dict.values()):
             weight *= GENRE_BOOST
+            print(f'{term} is a part of a genre and therefore has been boosted. Final weight: {weight} ')
         elif any(term in metadata["developer"] for metadata in metadata_dict.values()):
             weight *= DEVELOPER_BOOST
+            print(f'{term} is a part of a developer and therefore has been boosted. Final weight: {weight} ')
         elif any(term in metadata["publisher"] for metadata in metadata_dict.values()):
             weight *= PUBLISHER_BOOST
+            print(f'{term} is a part of a publisher and therefore has been boosted. Final weight: {weight} ')
         elif any(term in metadata["rating"] for metadata in metadata_dict.values()):
             weight *= RATING_BOOST
+            print(f'{term} is a part of a rating and therefore has been boosted. Final weight: {weight} ')
         elif any(term in metadata["releaseDate"] for metadata in metadata_dict.values()):
             weight *= RELEASE_DATE_BOOST
+            print(f'{term} is a part of a release date and therefore has been boosted. Final weight: {weight} ')
 
         query_weights[term] = weight
     return query_weights
@@ -264,7 +302,6 @@ def generate_normalized_weighted_matrix(weights):
     return df
 
 
-#methods to calculate dot product of 2 (preferably normlazied) vectors.
 def compute_cosine_similarity(query_weights, doc_weights):
     cosine_similarities = {}
     query_magnitude = math.sqrt(sum(weight ** 2 for weight in query_weights.values()))
@@ -292,7 +329,6 @@ def precision_and_recall(doc_array, relevant_docs_for_query):
     if not doc_array or not relevant_docs_for_query:
         return 0, 0 
     
-    docs_array = doc_array[0]
     relevant_count = 0
 
     relevant_docs_clean = [r.strip().lower().strip('-') for r in relevant_docs_for_query]
@@ -309,15 +345,17 @@ def precision_and_recall(doc_array, relevant_docs_for_query):
 
     return precision, recall
 
-
 def final_results(doc_array):
-    finalranks = []
-    rank = 1
-    top_docs = doc_array[:10]
+    final_ranks = []  
+    rank = 1  
+    top_docs = doc_array[:10]  
+    
     for doc_name, score in top_docs:
-        finalranks.append((rank, doc_name + '.html', score))  # Tuple with three elements
+        metadata = metadata_dict[doc_name]
+        document_values = [value for key, value in metadata.items() if key != 'tokens']
+        final_ranks.append((rank, f"{doc_name}.html", document_values))
         rank += 1
-    return finalranks
+    return final_ranks
 
 
 
@@ -333,7 +371,7 @@ def getMetadata():
 
 
     
-#add entites to file
+#Modular methods
 def add_to_entities(key, value):
     with open('Videogame-ir-searchengine/processed_game_entities.pkl', 'rb') as f:
         game_entities = pickle.load(f)
@@ -374,7 +412,6 @@ def add_to_relevant_docs(key, value):
 
 
     
-
 def save_new_game_enties(dict):
     if dict:
         with open('Videogame-ir-searchengine/processed_game_entities.pkl', 'wb') as f:

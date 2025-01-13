@@ -7,7 +7,6 @@
 # 16/12/2024 - v1 .10 - Added better formatting.
 
 
-import csv
 from bs4 import BeautifulSoup
 import pickle
 import os
@@ -164,13 +163,12 @@ def load_and_process_files(directory, num_of_files):
 def fix_metadata(metadata):
     data = metadata
 
-    step1 = lemmatize_metadata(data)  # Apply lemmatization to the whole structure
+    step1 = lemmatize_metadata(data)  
     print(step1)
-    step2 = clean_metadata(step1)  # Clean the metadata structure
-    step3 = clean_developer_and_publisher(step2)  # Clean developer and publisher info
+    step2 = clean_metadata(step1)  
+    step3 = clean_developer_and_publisher(step2)  
 
     for game, game_metadata in step3.items():
-        # Apply step 4 and 5 to each game's metadata
         step4 = simplify_ratings(game_metadata)  
         step5 = clean_titles(step4)  
         
@@ -201,12 +199,12 @@ def clean_developer_and_publisher(metadata_dict):
                 for item in metadata[key]:
                     cleaned_item = re.sub(regex, '', item).strip()
                     cleaned_list.append(cleaned_item)
-                metadata[key] = cleaned_list  # Update the metadata dictionary directly
+                metadata[key] = cleaned_list  #
     return metadata_dict
 
 def simplify_ratings(game_metadata):
-    rating = game_metadata.get('rating', '')  # Safely access 'rating'
-    rating_lower = rating.lower()  # Convert to lowercase for uniformity
+    rating = game_metadata.get('rating', '')  
+    rating_lower = rating.lower()  
     
     if "teen" in rating_lower:
         simplified_rating = "teen"
@@ -221,24 +219,20 @@ def simplify_ratings(game_metadata):
     else:
         simplified_rating = rating_lower
     
-    # Update the rating in the game_metadata dictionary
     game_metadata['rating'] = simplified_rating
     return game_metadata
 
 
 def clean_titles(game_metadata):
-    # Access the title and process it
-    title = game_metadata.get('title', '')  # Safely access 'title'
+    title = game_metadata.get('title', '') 
     cleaned_title = title.lower()
     cleaned_title = re.sub(r'[^\w\s]', '', cleaned_title)
     cleaned_title = re.sub(r'\s+', ' ', cleaned_title)
-    cleaned_title = re.sub(r'\s+s\b', 's', cleaned_title)  # Remove unnecessary 's' at the end
+    cleaned_title = re.sub(r'\s+s\b', 's', cleaned_title)  
     cleaned_title = cleaned_title.replace('ps2', '')
-    # Return the cleaned title and update the game_metadata
     game_metadata['title'] = cleaned_title
     return game_metadata
 
-# For debugging
 def lemmatize_metadata(metadata_dict):
     processed_dict = {}
     
