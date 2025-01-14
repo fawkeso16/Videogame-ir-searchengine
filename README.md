@@ -16,7 +16,7 @@ Instructions
 Note: An internet connection is required for the query expansion API.
 
 The main.py file includes two pre-set methods for testing. Comment out the method you do not wish to run.
-Ensure the source code is saved in a folder named Videogame-ir-searchengine. If you rename the folder, update the folder variable in config.py.
+Ensure the source code is saved in a folder named Videogame-ir-searchengine. If you rename the folder, update the folder variable in config.py. And please have the 'videogame' data set in your downloads.
 
     Method 1
         Uses pre-processed pickle files for quick data access.
