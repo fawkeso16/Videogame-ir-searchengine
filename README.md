@@ -33,8 +33,6 @@ Both methods will:
     Output precision/recall results as a graph for the final iteration.
     Display debug statements in the terminal for each query to provide detailed insights.
 
-Note: Query expansion is included for marking purposes, even though it slightly reduces result quality.
-Additional Query Testing
 
 The main method allows you to test custom queries. Simply comment out the other methods in main.py and enjoy experimenting with the system!
 
